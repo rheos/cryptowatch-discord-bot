@@ -3,15 +3,15 @@
     "channels": [
       {
         "timezone": "America/Vancouver",
-        "channel_id": 1394696245003550720
+        "channel_id": 1394725769883812091
       },
       {
         "timezone": "America/Halifax",
-        "channel_id": 1394697041502015639
+        "channel_id": 1394725860874915860
       },
       {
         "timezone": "Australia/Brisbane",
-        "channel_id": 1394699039492149420
+        "channel_id": 1394725917846278225
       }
     ]
   }
