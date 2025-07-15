@@ -31,7 +31,10 @@ with open("config.json", "r") as f:
 TOKEN = config["bot_token"]
 CHANNELS = config["channels"]
 
-client = discord.Client(intents=discord.Intents.default())
+# Create intents with guilds enabled (needed for voice channels)
+intents = discord.Intents.default()
+intents.guilds = True
+client = discord.Client(intents=intents)
 
 def format_time(city_tz):
     now = datetime.now(timezone(city_tz))
@@ -76,9 +79,13 @@ async def update_channel_names():
         if channel:
             try:
                 new_name = format_time(tz_name)
+                logger.info(f"Attempting to update channel {channel.name} (ID: {channel_id}) in guild {channel.guild.name}")
                 await channel.edit(name=new_name)
                 logger.info(f"Updated {tz_name} → {new_name}")
             except Exception as e:
                 logger.error(f"Error updating {tz_name}: {e}")
+                logger.error(f"Channel type: {type(channel).__name__}, Guild: {channel.guild.name if channel else 'None'}")
+        else:
+            logger.error(f"Channel {channel_id} not found for {tz_name}")
 
 client.run(TOKEN)
