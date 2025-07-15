@@ -1,5 +1,8 @@
 {
     "bot_token": "MTM5NDY4NjQzODU2NTQ4MjUxNg.GM3_XV.EaG8kSMWVXbI-dBHy4w0VSr6tfWF4KvQTYeXJk",
+    "market_event_channel_id": 1394824388364210218,
+    "market_times_message_channel_id": 1393754229096583278,
+    "market_times_message_id": 1394828121403818005,
     "channels": [
       {
         "timezone": "America/Vancouver",
