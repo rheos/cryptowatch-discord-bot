@@ -9,7 +9,7 @@ A Discord bot that updates channel names to display current time in different ti
 - Displays time in format: "City H:MM AM/PM"
 - Shows countdown to next major market event (London Open, US Open, etc.)
 - Auto-assigns roles to new members
-- Updates a pinned message with all market times in major timezones
+- Updates a pinned message with all market times in major timezones and countdowns
 
 ## Setup
 
@@ -34,14 +34,7 @@ pip install discord.py pytz
    - Select "Manage Channels" permission
    - Use the generated URL to invite the bot
 
-5. (Optional) Set up pinned market times message:
-```bash
-python setup-market-times.py
-# Follow prompts to create message
-# Add the IDs to config.json
-```
-
-6. Run the bot:
+5. Run the bot:
 ```bash
 python crypto-watch-bot.py
 ```
@@ -52,7 +45,7 @@ The `config.json` file contains:
 - `bot_token`: Your Discord bot token
 - `market_event_channel_id`: Channel ID for market event countdown (optional)
 - `market_times_message_channel_id`: Channel containing pinned times message (optional)
-- `market_times_message_id`: Message ID to update with market times (optional)
+- `market_times_message_id`: Message ID to update with market times (optional - create a message manually and pin it, then add its ID here)
 - `channels`: Array of channels to update with timezone
   - `timezone`: Timezone string (e.g., "America/Vancouver")
   - `channel_id`: Discord channel ID
