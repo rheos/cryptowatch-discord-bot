@@ -4,6 +4,25 @@ from discord.ext import tasks
 from datetime import datetime
 from pytz import timezone
 import asyncio
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Set up logging
+logger = logging.getLogger('discord-timezone-bot')
+logger.setLevel(logging.INFO)
+
+# Create rotating file handler (max 10MB, keep 5 backups)
+handler = RotatingFileHandler(
+    'bot.log',
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
+)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+
+# Also suppress discord.py's verbose logging
+discord_logger = logging.getLogger('discord')
+discord_logger.setLevel(logging.WARNING)
 
 # Load configuration from JSON
 with open("config.json", "r") as f:
@@ -35,7 +54,7 @@ def format_time(city_tz):
 
 @client.event
 async def on_ready():
-    print(f"Logged in as {client.user}")
+    logger.info(f"Logged in as {client.user}")
     # Wait until the next 5-minute mark before starting
     now = datetime.now()
     minutes_to_wait = 5 - (now.minute % 5)
@@ -43,7 +62,7 @@ async def on_ready():
         minutes_to_wait = 0
     seconds_to_wait = minutes_to_wait * 60 - now.second
     
-    print(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
+    logger.info(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
     await asyncio.sleep(seconds_to_wait)
     
     update_channel_names.start()
@@ -58,8 +77,8 @@ async def update_channel_names():
             try:
                 new_name = format_time(tz_name)
                 await channel.edit(name=new_name)
-                print(f"Updated {tz_name} → {new_name}")
+                logger.info(f"Updated {tz_name} → {new_name}")
             except Exception as e:
-                print(f"Error updating {tz_name}: {e}")
+                logger.error(f"Error updating {tz_name}: {e}")
 
 client.run(TOKEN)
