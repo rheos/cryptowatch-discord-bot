@@ -22,10 +22,15 @@ def format_time(city_tz):
     
     # Get city name and format it nicely
     city_name = city_tz.split("/")[1].replace("_", " ")
-    if city_name.lower() == "halifax":
-        city_name = "PEI"  # Show PEI instead of Halifax
     
-    # Format like "Tokyo 12:35am" with actual spaces
+    # Properly capitalize city names
+    city_name = city_name.title()
+    
+    # Replace Halifax with PEI
+    if city_name == "Halifax":
+        city_name = "PEI"
+    
+    # Format like "Tokyo 12:45pm" with actual spaces
     return f"{city_name} {hour}:{minute}{period}"
 
 @client.event
