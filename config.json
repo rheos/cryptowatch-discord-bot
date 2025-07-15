@@ -1,0 +1,18 @@
+{
+    "bot_token": "MTM5NDY4NjQzODU2NTQ4MjUxNg.GM3_XV.EaG8kSMWVXbI-dBHy4w0VSr6tfWF4KvQTYeXJk",
+    "channels": [
+      {
+        "timezone": "America/Vancouver",
+        "channel_id": 1394696245003550720
+      },
+      {
+        "timezone": "America/Halifax",
+        "channel_id": 1394697041502015639
+      },
+      {
+        "timezone": "Australia/Brisbane",
+        "channel_id": 1394699039492149420
+      }
+    ]
+  }
+  
