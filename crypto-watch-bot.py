@@ -15,13 +15,17 @@ client = discord.Client(intents=discord.Intents.default())
 
 def format_time(city_tz):
     now = datetime.now(timezone(city_tz))
-    hour = now.strftime('%-I').lower()  # Use '%#I' on Windows if needed
+    hour = now.strftime('%-I')  # Use '%#I' on Windows if needed
     minute = now.strftime('%M')
     period = now.strftime('%p').lower()
-    city_name = city_tz.split("/")[1].lower()
     
-    # Create a Discord-friendly channel name (lowercase, no spaces)
-    return f"🕒{city_name}-{hour}{minute}{period}"
+    # Get city name and format it nicely
+    city_name = city_tz.split("/")[1].replace("_", " ")
+    if city_name.lower() == "halifax":
+        city_name = "PEI"  # Show PEI instead of Halifax
+    
+    # Format like "Tokyo 12:35am" with actual spaces
+    return f"{city_name} {hour}:{minute}{period}"
 
 @client.event
 async def on_ready():
