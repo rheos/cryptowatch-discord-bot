@@ -3,6 +3,7 @@ import discord
 from discord.ext import tasks
 from datetime import datetime
 from pytz import timezone
+import asyncio
 
 # Load configuration from JSON
 with open("config.json", "r") as f:
@@ -30,6 +31,16 @@ def format_time(city_tz):
 @client.event
 async def on_ready():
     print(f"Logged in as {client.user}")
+    # Wait until the next 5-minute mark before starting
+    now = datetime.now()
+    minutes_to_wait = 5 - (now.minute % 5)
+    if minutes_to_wait == 5:
+        minutes_to_wait = 0
+    seconds_to_wait = minutes_to_wait * 60 - now.second
+    
+    print(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
+    await asyncio.sleep(seconds_to_wait)
+    
     update_channel_names.start()
 
 @tasks.loop(minutes=5)
