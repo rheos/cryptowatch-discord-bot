@@ -31,9 +31,10 @@ with open("config.json", "r") as f:
 TOKEN = config["bot_token"]
 CHANNELS = config["channels"]
 
-# Create intents with guilds enabled (needed for voice channels)
+# Create intents with guilds and members enabled
 intents = discord.Intents.default()
 intents.guilds = True
+intents.members = True  # Need this to track member joins
 client = discord.Client(intents=intents)
 
 def format_time(city_tz):
@@ -69,6 +70,25 @@ async def on_ready():
     await asyncio.sleep(seconds_to_wait)
     
     update_channel_names.start()
+
+@client.event
+async def on_member_join(member):
+    # Configure the role name to assign
+    ROLE_NAME = "Member"  # Change this to your role name
+    
+    try:
+        # Find the role by name
+        role = discord.utils.get(member.guild.roles, name=ROLE_NAME)
+        
+        if role:
+            # Assign the role to the new member
+            await member.add_roles(role)
+            logger.info(f"Assigned {ROLE_NAME} role to new member: {member.name} in {member.guild.name}")
+        else:
+            logger.warning(f"Role '{ROLE_NAME}' not found in {member.guild.name}")
+            
+    except Exception as e:
+        logger.error(f"Error assigning role to {member.name}: {e}")
 
 @tasks.loop(minutes=5)
 async def update_channel_names():
