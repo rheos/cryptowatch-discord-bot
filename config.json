@@ -12,6 +12,10 @@
       {
         "timezone": "Australia/Brisbane",
         "channel_id": 1394725917846278225
+      },
+      {
+        "timezone": "Europe/Istanbul",
+        "channel_id": 1394733226538303518
       }
     ]
   }
