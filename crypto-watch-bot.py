@@ -148,8 +148,16 @@ def get_next_market_event():
         hours = int(total_seconds // 3600)
         minutes = int(round((total_seconds % 3600) / 60))
         
+        # Handle case where rounding minutes gives us 60
+        if minutes == 60:
+            hours += 1
+            minutes = 0
+        
         if hours > 0:
-            countdown = f"{hours}h {minutes}m"
+            if minutes > 0:
+                countdown = f"{hours}h {minutes}m"
+            else:
+                countdown = f"{hours}h"
         else:
             countdown = f"{minutes}m"
         
@@ -210,8 +218,16 @@ def format_market_times_message():
         hours = int(total_seconds // 3600)
         minutes = int(round((total_seconds % 3600) / 60))
         
+        # Handle case where rounding minutes gives us 60
+        if minutes == 60:
+            hours += 1
+            minutes = 0
+        
         if hours > 0:
-            countdown = f"in {hours}h {minutes}m"
+            if minutes > 0:
+                countdown = f"in {hours}h {minutes}m"
+            else:
+                countdown = f"in {hours}h"
         else:
             countdown = f"in {minutes}m"
         
