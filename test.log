@@ -1,0 +1,17 @@
+[2025-07-15 17:06:05] [INFO    ] discord.client: logging in using static token
+Traceback (most recent call last):
+  File "/Users/robin/Documents/foaftech/webdev/crypto-site/discord-bot/crypto-watch-bot.py", line 279, in <module>
+    client.run(TOKEN)
+  File "/Users/robin/Library/Python/3.9/lib/python/site-packages/discord/client.py", line 906, in run
+    asyncio.run(runner())
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/robin/Library/Python/3.9/lib/python/site-packages/discord/client.py", line 895, in runner
+    await self.start(token, reconnect=reconnect)
+  File "/Users/robin/Library/Python/3.9/lib/python/site-packages/discord/client.py", line 824, in start
+    await self.connect(reconnect=reconnect)
+  File "/Users/robin/Library/Python/3.9/lib/python/site-packages/discord/client.py", line 748, in connect
+    raise PrivilegedIntentsRequired(exc.shard_id) from None
+discord.errors.PrivilegedIntentsRequired: Shard ID None is requesting privileged intents that have not been explicitly enabled in the developer portal. It is recommended to go to https://discord.com/developers/applications/ and explicitly enable the privileged intents within your application's page. If this is not possible, then consider disabling the privileged intents instead.

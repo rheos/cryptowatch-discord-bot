@@ -43,10 +43,10 @@ MARKET_EVENTS = [
     {"label": "Daily Close", "hour": 0, "minute": 0}
 ]
 
-# Create intents with guilds and members enabled
+# Create intents with guilds enabled
 intents = discord.Intents.default()
 intents.guilds = True
-intents.members = True  # Need this to track member joins
+# intents.members = True  # Commented out - enable this if you want auto-role assignment
 client = discord.Client(intents=intents)
 
 def format_time(city_tz):
@@ -125,29 +125,34 @@ def get_next_market_event():
     return "🎯 No upcoming events"
 
 def format_market_times_message():
-    """Create a formatted message showing all market event times in major timezones"""
+    """Create a formatted message showing all market event times in UTC with countdowns"""
     utc_tz = timezone('UTC')
-    ny_tz = timezone('America/New_York')
-    london_tz = timezone('Europe/London')
-    tokyo_tz = timezone('Asia/Tokyo')
-    
     now_utc = datetime.now(utc_tz)
     current_weekday = now_utc.weekday()
     is_weekend = current_weekday >= 5
     
+    # Get current times in major markets
+    ny_tz = timezone('America/New_York')
+    london_tz = timezone('Europe/London')
+    tokyo_tz = timezone('Asia/Tokyo')
+    
+    now_ny = datetime.now(ny_tz)
+    now_london = datetime.now(london_tz)
+    now_tokyo = datetime.now(tokyo_tz)
+    
     # Create header
-    message = "📊 **Market Hours Reference**\n"
+    message = "📊 **Market Hours (UTC)**\n"
     message += "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     
     # Add current times
-    message += "🌍 **Current Time**\n"
-    message += f"• UTC: {now_utc.strftime('%I:%M %p')}\n"
-    message += f"• New York: {now_utc.astimezone(ny_tz).strftime('%I:%M %p')}\n"
-    message += f"• London: {now_utc.astimezone(london_tz).strftime('%I:%M %p')}\n"
-    message += f"• Tokyo: {now_utc.astimezone(tokyo_tz).strftime('%I:%M %p')}\n\n"
+    message += f"🌍 **Current Time**\n"
+    message += f"UTC: {now_utc.strftime('%I:%M %p')}\n"
+    message += f"New York: {now_ny.strftime('%I:%M %p')}\n"
+    message += f"London: {now_london.strftime('%I:%M %p')}\n"
+    message += f"Tokyo: {now_tokyo.strftime('%I:%M %p')}\n\n"
     
     # Add market events with countdowns
-    message += "📈 **Market Events (Daily)**\n"
+    message += "📈 **Today's Schedule**\n"
     
     for event in MARKET_EVENTS:
         # Skip stock market events on weekends (but keep crypto events)
@@ -172,24 +177,17 @@ def format_market_times_message():
         minutes = int((time_remaining.total_seconds() % 3600) // 60)
         
         if hours > 0:
-            countdown = f" ⏱️ **{hours}h {minutes}m**"
+            countdown = f"in {hours}h {minutes}m"
         else:
-            countdown = f" ⏱️ **{minutes}m**"
+            countdown = f"in {minutes}m"
         
-        # Convert to other timezones
-        event_ny = event_utc.astimezone(ny_tz)
-        event_london = event_utc.astimezone(london_tz)
-        event_tokyo = event_utc.astimezone(tokyo_tz)
-        
-        message += f"\n**{event['label']}**{countdown}\n"
-        message += f"• UTC: {event_utc.strftime('%I:%M %p')}\n"
-        message += f"• NY: {event_ny.strftime('%I:%M %p')}\n"
-        message += f"• London: {event_london.strftime('%I:%M %p')}\n"
-        message += f"• Tokyo: {event_tokyo.strftime('%I:%M %p')}\n"
+        # Format the line
+        time_str = event_utc.strftime('%I:%M %p')
+        message += f"\n**{event['label']}** - {time_str} UTC ({countdown})"
     
     # Add footer
-    message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    message += f"_Last updated: {now_utc.strftime('%Y-%m-%d %H:%M UTC')}_"
+    message += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    message += f"_Updated every 5 minutes_"
     
     return message
 
@@ -208,24 +206,25 @@ async def on_ready():
     
     update_channel_names.start()
 
-@client.event
-async def on_member_join(member):
-    # Configure the role name to assign
-    ROLE_NAME = "Member"  # Change this to your role name
-    
-    try:
-        # Find the role by name
-        role = discord.utils.get(member.guild.roles, name=ROLE_NAME)
-        
-        if role:
-            # Assign the role to the new member
-            await member.add_roles(role)
-            logger.info(f"Assigned {ROLE_NAME} role to new member: {member.name} in {member.guild.name}")
-        else:
-            logger.warning(f"Role '{ROLE_NAME}' not found in {member.guild.name}")
-            
-    except Exception as e:
-        logger.error(f"Error assigning role to {member.name}: {e}")
+# Commented out - enable this if you enable members intent
+# @client.event
+# async def on_member_join(member):
+#     # Configure the role name to assign
+#     ROLE_NAME = "Member"  # Change this to your role name
+#     
+#     try:
+#         # Find the role by name
+#         role = discord.utils.get(member.guild.roles, name=ROLE_NAME)
+#         
+#         if role:
+#             # Assign the role to the new member
+#             await member.add_roles(role)
+#             logger.info(f"Assigned {ROLE_NAME} role to new member: {member.name} in {member.guild.name}")
+#         else:
+#             logger.warning(f"Role '{ROLE_NAME}' not found in {member.guild.name}")
+#             
+#     except Exception as e:
+#         logger.error(f"Error assigning role to {member.name}: {e}")
 
 @tasks.loop(minutes=5)
 async def update_channel_names():
@@ -260,20 +259,46 @@ async def update_channel_names():
             logger.error(f"Market event channel {MARKET_EVENT_CHANNEL_ID} not found")
     
     # Update pinned market times message
-    if MARKET_TIMES_MESSAGE_CHANNEL_ID and MARKET_TIMES_MESSAGE_ID:
+    if MARKET_TIMES_MESSAGE_CHANNEL_ID:
         try:
             channel = client.get_channel(MARKET_TIMES_MESSAGE_CHANNEL_ID)
             if channel:
-                message = await channel.fetch_message(MARKET_TIMES_MESSAGE_ID)
-                if message:
+                # Try to load message ID from file
+                message_id = None
+                try:
+                    with open("market_message.id", "r") as f:
+                        message_id = int(f.read().strip())
+                except:
+                    pass
+                
+                # Try to fetch and update existing message
+                message_updated = False
+                if message_id:
+                    try:
+                        message = await channel.fetch_message(message_id)
+                        new_content = format_market_times_message()
+                        await message.edit(content=new_content)
+                        logger.info("Updated pinned market times message")
+                        message_updated = True
+                    except discord.NotFound:
+                        logger.info("Message not found, will create new one")
+                    except discord.Forbidden:
+                        logger.info("Cannot edit message, will create new one")
+                
+                # Create new message if needed
+                if not message_updated:
                     new_content = format_market_times_message()
-                    await message.edit(content=new_content)
-                    logger.info("Updated pinned market times message")
-                else:
-                    logger.error(f"Message {MARKET_TIMES_MESSAGE_ID} not found")
+                    message = await channel.send(new_content)
+                    await message.pin()
+                    
+                    # Save the new message ID
+                    with open("market_message.id", "w") as f:
+                        f.write(str(message.id))
+                    
+                    logger.info(f"Created new pinned market times message with ID: {message.id}")
             else:
                 logger.error(f"Channel {MARKET_TIMES_MESSAGE_CHANNEL_ID} not found")
         except Exception as e:
-            logger.error(f"Error updating pinned message: {e}")
+            logger.error(f"Error handling pinned message: {e}")
 
 client.run(TOKEN)

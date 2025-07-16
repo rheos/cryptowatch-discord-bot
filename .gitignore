@@ -17,3 +17,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Bot files
+bot.pid
+market_message.id
+bot.log*
