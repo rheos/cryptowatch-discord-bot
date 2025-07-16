@@ -37,8 +37,8 @@ MARKET_TIMES_MESSAGE_ID = config.get("market_times_message_id")
 # Market events configuration
 MARKET_EVENTS = [
     {"label": "London Open", "hour": 7, "minute": 0},
-    {"label": "US Open", "hour": 13, "minute": 30},
-    {"label": "NYSE Close", "hour": 20, "minute": 0},
+    {"label": "NY Open", "hour": 13, "minute": 30},
+    {"label": "NY Close", "hour": 20, "minute": 0},
     {"label": "Asia Open", "hour": 0, "minute": 0},
     {"label": "Daily Close", "hour": 0, "minute": 0}
 ]
@@ -95,8 +95,8 @@ def get_next_market_event():
         if time_diff < 300:  # 300 seconds = 5 minutes
             # Format the "Now" message based on event type
             if "Close" in event['label']:
-                if event['label'] == "NYSE Close":
-                    return f"🎯 NYSE Closing Now"
+                if event['label'] == "NY Close":
+                    return f"🎯 NY Closing Now"
                 else:
                     return f"🎯 Daily Closing Now"
             else:
