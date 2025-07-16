@@ -111,9 +111,10 @@ def get_next_market_event():
         label, event_time = next_event
         time_remaining = event_time - now_utc
         
-        # Format the countdown
-        hours = int(time_remaining.total_seconds() // 3600)
-        minutes = int((time_remaining.total_seconds() % 3600) // 60)
+        # Format the countdown (round to nearest minute)
+        total_seconds = time_remaining.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int(round((total_seconds % 3600) / 60))
         
         if hours > 0:
             countdown = f"{hours}h {minutes}m"
@@ -171,10 +172,11 @@ def format_market_times_message():
             days_until_monday = 7 - event_utc.weekday()
             event_utc += timedelta(days=days_until_monday)
         
-        # Calculate countdown
+        # Calculate countdown (round to nearest minute)
         time_remaining = event_utc - now_utc
-        hours = int(time_remaining.total_seconds() // 3600)
-        minutes = int((time_remaining.total_seconds() % 3600) // 60)
+        total_seconds = time_remaining.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int(round((total_seconds % 3600) / 60))
         
         if hours > 0:
             countdown = f"in {hours}h {minutes}m"
