@@ -77,6 +77,38 @@ def get_next_market_event():
     # Skip weekends for stock market events
     is_weekend = current_weekday >= 5
     
+    # First check if any event is happening right now (within current 5-minute window)
+    for event in MARKET_EVENTS:
+        # Skip stock market events on weekends
+        if is_weekend and event["label"] not in ["Daily Close", "Asia Open"]:
+            continue
+            
+        event_time = now_utc.replace(
+            hour=event["hour"], 
+            minute=event["minute"], 
+            second=0, 
+            microsecond=0
+        )
+        
+        # Check if event is within the current 5-minute window
+        time_diff = abs((event_time - now_utc).total_seconds())
+        if time_diff < 300:  # 300 seconds = 5 minutes
+            # Format the "Now" message based on event type
+            if "Close" in event['label']:
+                if event['label'] == "NYSE Close":
+                    return f"🎯 NYSE Closing Now"
+                else:
+                    return f"🎯 Daily Closing Now"
+            else:
+                # For opens, remove "Open" from label
+                label_parts = event['label'].split()
+                if label_parts[-1] == "Open":
+                    label_parts[-1] = "Opening Now"
+                else:
+                    label_parts.append("Opening Now")
+                return f"🎯 {' '.join(label_parts)}"
+    
+    # If no event is happening now, find the next one
     next_event = None
     min_time_diff = float('inf')
     
