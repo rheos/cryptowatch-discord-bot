@@ -68,9 +68,10 @@ def format_time(city_tz):
     # Format like "Tokyo 12:45pm" with actual spaces
     return f"{city_name} {hour}:{minute}{period}"
 
-def get_next_market_event():
+def get_next_market_event(now_utc=None):
     """Calculate the next upcoming market event and time remaining"""
-    now_utc = datetime.now(timezone('UTC'))
+    if now_utc is None:
+        now_utc = datetime.now(timezone('UTC'))
     current_time = now_utc.time()
     current_weekday = now_utc.weekday()  # 0 = Monday, 6 = Sunday
     
@@ -165,10 +166,11 @@ def get_next_market_event():
     
     return "🎯 No upcoming events"
 
-def format_market_times_message():
+def format_market_times_message(now_utc=None):
     """Create a formatted message showing all market event times in UTC with countdowns"""
     utc_tz = timezone('UTC')
-    now_utc = datetime.now(utc_tz)
+    if now_utc is None:
+        now_utc = datetime.now(utc_tz)
     current_weekday = now_utc.weekday()
     is_weekend = current_weekday >= 5
     
@@ -278,6 +280,9 @@ async def on_ready():
 
 @tasks.loop(minutes=5)
 async def update_channel_names():
+    # Get current time once for all updates
+    now_utc = datetime.now(timezone('UTC'))
+    
     # Update timezone channels
     for entry in CHANNELS:
         tz_name = entry["timezone"]
@@ -300,7 +305,7 @@ async def update_channel_names():
         channel = client.get_channel(MARKET_EVENT_CHANNEL_ID)
         if channel:
             try:
-                new_name = get_next_market_event()
+                new_name = get_next_market_event(now_utc)
                 await channel.edit(name=new_name)
                 logger.info(f"Updated market event channel → {new_name}")
             except Exception as e:
@@ -326,7 +331,7 @@ async def update_channel_names():
                 if message_id:
                     try:
                         message = await channel.fetch_message(message_id)
-                        new_content = format_market_times_message()
+                        new_content = format_market_times_message(now_utc)
                         await message.edit(content=new_content)
                         logger.info("Updated pinned market times message")
                         message_updated = True
@@ -337,7 +342,7 @@ async def update_channel_names():
                 
                 # Create new message if needed
                 if not message_updated:
-                    new_content = format_market_times_message()
+                    new_content = format_market_times_message(now_utc)
                     message = await channel.send(new_content)
                     await message.pin()
                     
