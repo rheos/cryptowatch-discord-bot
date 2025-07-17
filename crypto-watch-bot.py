@@ -6,6 +6,7 @@ from pytz import timezone
 import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
+from crypto_data_commands import CryptoDataCommands
 
 # Set up logging
 logger = logging.getLogger('discord-timezone-bot')

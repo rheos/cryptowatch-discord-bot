@@ -1,0 +1,31 @@
+{
+  "bot_token": "YOUR_BOT_TOKEN",
+  
+  "channels": [
+    {
+      "timezone": "America/Vancouver",
+      "channel_id": 1394725769883812091
+    }
+  ],
+  
+  "market_event_channel_id": 1394824388364210218,
+  "market_times_message_channel_id": 1393754229096583278,
+  
+  "auto_update_channels": {
+    "funding": null,
+    "alerts": null
+  },
+  
+  "features": {
+    "timezone_updates": true,
+    "market_events": true,
+    "crypto_commands": true,
+    "auto_updates": false
+  },
+  
+  "update_intervals": {
+    "funding_summary": 4,
+    "extreme_alerts": 0.5,
+    "market_events": 5
+  }
+}
