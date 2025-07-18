@@ -38,28 +38,47 @@ class TimezoneCog(commands.Cog):
         # Special replacements
         if city_name == "Halifax":
             city_name = "PEI"
+        elif city_name == "Kolkata":
+            city_name = "India"
         
         return f"{city_name} {hour}:{minute_str}{period}"
     
     @tasks.loop(minutes=5)
     async def update_timezone_channels(self):
         """Update timezone channel names every 5 minutes"""
-        logger.info("Updating timezone channels...")
-        
-        for entry in self.channels:
-            tz_name = entry["timezone"]
-            channel_id = entry["channel_id"]
-            channel = self.bot.get_channel(channel_id)
+        try:
+            logger.info("Updating timezone channels...")
+            updates_made = 0
             
-            if channel:
-                try:
-                    new_name = self.format_time(tz_name)
-                    await channel.edit(name=new_name)
-                    logger.info(f"Updated {tz_name} → {new_name}")
-                except Exception as e:
-                    logger.error(f"Error updating {tz_name}: {e}")
-            else:
-                logger.error(f"Channel {channel_id} not found for {tz_name}")
+            for entry in self.channels:
+                tz_name = entry["timezone"]
+                channel_id = entry["channel_id"]
+                channel = self.bot.get_channel(channel_id)
+                
+                if channel:
+                    try:
+                        new_name = self.format_time(tz_name)
+                        # Only update if the name is different
+                        if channel.name != new_name:
+                            await channel.edit(name=new_name)
+                            logger.info(f"Updated {tz_name} → {new_name}")
+                            updates_made += 1
+                        else:
+                            logger.debug(f"{tz_name} already showing {new_name}, skipping update")
+                    except discord.errors.HTTPException as e:
+                        if e.status == 429:  # Rate limited
+                            logger.warning(f"Rate limited updating {tz_name}, will retry next cycle")
+                        else:
+                            logger.error(f"HTTP error updating {tz_name}: {e}", exc_info=True)
+                    except Exception as e:
+                        logger.error(f"Unexpected error updating {tz_name}: {e}", exc_info=True)
+                else:
+                    logger.error(f"Channel {channel_id} not found for {tz_name}")
+            
+            if updates_made == 0:
+                logger.info("All timezone channels already up to date")
+        except Exception as e:
+            logger.error(f"Critical error in timezone update loop: {e}", exc_info=True)
     
     @update_timezone_channels.before_loop
     async def before_timezone_update(self):
