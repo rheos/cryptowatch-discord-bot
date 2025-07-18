@@ -19,6 +19,10 @@
       {
         "timezone": "Europe/Istanbul",
         "channel_id": 1395417978870431867
+      },
+      {
+        "timezone": "Asia/Kolkata",
+        "channel_id": 1395827299424800788
       }
     ],
     "auto_update_channels": {

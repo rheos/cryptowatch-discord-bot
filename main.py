@@ -16,16 +16,18 @@ from cogs.timezone_cog import TimezoneCog
 from cogs.market_events_cog import MarketEventsCog
 from cogs.crypto_data_cog import CryptoDataCog
 from cogs.auto_updates_cog import AutoUpdatesCog
+from cogs.auto_role_cog import AutoRoleCog
 
 # Set up logging
 def setup_logging():
-    logger = logging.getLogger('discord-bot')
-    logger.setLevel(logging.INFO)
-    
     # Ensure logs directory exists
     os.makedirs('logs', exist_ok=True)
     
-    # Rotating file handler
+    # Main bot logger
+    logger = logging.getLogger('discord-bot')
+    logger.setLevel(logging.INFO)
+    
+    # Main bot log file
     handler = RotatingFileHandler(
         'logs/bot.log',
         maxBytes=10*1024*1024,  # 10MB
@@ -40,7 +42,35 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(console_handler)
     
-    # Also suppress discord.py's verbose logging
+    # Set up separate loggers for each cog with their own files
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'auto-role']
+    for cog_name in cog_loggers:
+        cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
+        cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging
+        
+        # Individual file for each cog
+        cog_handler = RotatingFileHandler(
+            f'logs/{cog_name}.log',
+            maxBytes=5*1024*1024,  # 5MB per cog
+            backupCount=3
+        )
+        cog_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        cog_logger.addHandler(cog_handler)
+        
+        # Also add to main console
+        cog_logger.addHandler(console_handler)
+    
+    # Error-only log file
+    error_handler = RotatingFileHandler(
+        'logs/errors.log',
+        maxBytes=5*1024*1024,
+        backupCount=5
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s\n%(exc_info)s'))
+    logging.getLogger().addHandler(error_handler)
+    
+    # Suppress discord.py's verbose logging
     discord_logger = logging.getLogger('discord')
     discord_logger.setLevel(logging.WARNING)
     
@@ -63,7 +93,8 @@ class CryptoWatchBot(commands.Bot):
         super().__init__(
             command_prefix='!',
             intents=intents,
-            description="CryptoWatch Bot - Timezones, Market Events & Crypto Data"
+            description="CryptoWatch Bot - Timezones, Market Events & Crypto Data",
+            help_command=None  # Disable default help
         )
         
         self.config = config
@@ -76,6 +107,7 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(MarketEventsCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
         await self.add_cog(AutoUpdatesCog(self, self.config))
+        await self.add_cog(AutoRoleCog(self, self.config))
         
         self.logger.info("All cogs loaded successfully")
     

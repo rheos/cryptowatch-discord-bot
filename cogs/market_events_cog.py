@@ -103,8 +103,10 @@ class MarketEventsCog(commands.Cog):
             
             total_seconds = time_remaining.total_seconds()
             hours = int(total_seconds // 3600)
-            minutes = int(round((total_seconds % 3600) / 60))
+            minutes = int((total_seconds % 3600) / 60)
             
+            # Round to nearest 5 minutes
+            minutes = 5 * round(minutes / 5)
             if minutes == 60:
                 hours += 1
                 minutes = 0
@@ -127,17 +129,21 @@ class MarketEventsCog(commands.Cog):
         if now_utc is None:
             now_utc = datetime.now(utc_tz)
         
+        # Round down to last 5-minute interval
+        minute = now_utc.minute - (now_utc.minute % 5)
+        now_utc = now_utc.replace(minute=minute, second=0, microsecond=0)
+        
         current_weekday = now_utc.weekday()
         is_weekend = current_weekday >= 5
         
-        # Get current times in major markets
+        # Get current times in major markets (also rounded)
         ny_tz = timezone('America/New_York')
         london_tz = timezone('Europe/London')
         tokyo_tz = timezone('Asia/Tokyo')
         
-        now_ny = datetime.now(ny_tz)
-        now_london = datetime.now(london_tz)
-        now_tokyo = datetime.now(tokyo_tz)
+        now_ny = now_utc.astimezone(ny_tz)
+        now_london = now_utc.astimezone(london_tz)
+        now_tokyo = now_utc.astimezone(tokyo_tz)
         
         # Create message
         message = "📊 **Market Hours (UTC)**\n"
@@ -175,8 +181,10 @@ class MarketEventsCog(commands.Cog):
             time_remaining = event_utc - now_utc
             total_seconds = time_remaining.total_seconds()
             hours = int(total_seconds // 3600)
-            minutes = int(round((total_seconds % 3600) / 60))
+            minutes = int((total_seconds % 3600) / 60)
             
+            # Round to nearest 5 minutes
+            minutes = 5 * round(minutes / 5)
             if minutes == 60:
                 hours += 1
                 minutes = 0
@@ -224,10 +232,19 @@ class MarketEventsCog(commands.Cog):
             if channel:
                 try:
                     new_name = self.get_next_market_event(now_utc)
-                    await channel.edit(name=new_name)
-                    logger.info(f"Updated market event channel → {new_name}")
+                    # Only update if the name is different
+                    if channel.name != new_name:
+                        await channel.edit(name=new_name)
+                        logger.info(f"Updated market event channel → {new_name}")
+                    else:
+                        logger.debug(f"Market event channel already showing {new_name}, skipping update")
+                except discord.errors.HTTPException as e:
+                    if e.status == 429:  # Rate limited
+                        logger.warning(f"Rate limited updating market event channel, will retry next cycle")
+                    else:
+                        logger.error(f"HTTP error updating market event channel: {e}", exc_info=True)
                 except Exception as e:
-                    logger.error(f"Error updating market event channel: {e}")
+                    logger.error(f"Unexpected error updating market event channel: {e}", exc_info=True)
         
         # Update pinned message
         if self.market_times_channel_id:
