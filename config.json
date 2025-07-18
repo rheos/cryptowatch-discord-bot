@@ -1,25 +1,29 @@
 {
-    "bot_token": "MTM5NDY4NjQzODU2NTQ4MjUxNg.GM3_XV.EaG8kSMWVXbI-dBHy4w0VSr6tfWF4KvQTYeXJk",
-    "market_event_channel_id": 1394824388364210218,
-    "market_times_message_channel_id": 1393754229096583278,
-    "market_times_message_id": 1394828121403818005,
+    "bot_token": "MTM5NTQ3MDUxOTcxNjkzNzg2MA.GYSFNW.dnraYVYVC70L8G4jSUphaMnGw6jKQr7tM2zmXg",
+    "market_event_channel_id": 1395418235641532550,
+    "market_times_message_channel_id": 1395419153451585677,
+    "market_times_message_id": null,
     "channels": [
       {
         "timezone": "America/Vancouver",
-        "channel_id": 1394725769883812091
+        "channel_id": 1395417773823361044
       },
       {
         "timezone": "America/Halifax",
-        "channel_id": 1394725860874915860
+        "channel_id": 1395417876092948520
       },
       {
         "timezone": "Australia/Brisbane",
-        "channel_id": 1394725917846278225
+        "channel_id": 1395418091978227794
       },
       {
         "timezone": "Europe/Istanbul",
-        "channel_id": 1394733226538303518
+        "channel_id": 1395417978870431867
       }
-    ]
+    ],
+    "auto_update_channels": {
+      "funding": 1395419072270962840,
+      "alerts": 1395419105737052202
+    }
   }
   

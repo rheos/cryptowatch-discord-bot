@@ -15,20 +15,30 @@ import sys
 from cogs.timezone_cog import TimezoneCog
 from cogs.market_events_cog import MarketEventsCog
 from cogs.crypto_data_cog import CryptoDataCog
+from cogs.auto_updates_cog import AutoUpdatesCog
 
 # Set up logging
 def setup_logging():
     logger = logging.getLogger('discord-bot')
     logger.setLevel(logging.INFO)
     
+    # Ensure logs directory exists
+    os.makedirs('logs', exist_ok=True)
+    
     # Rotating file handler
     handler = RotatingFileHandler(
-        'bot.log',
+        'logs/bot.log',
         maxBytes=10*1024*1024,  # 10MB
         backupCount=5
     )
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
+    
+    # Console handler for immediate feedback
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(console_handler)
     
     # Also suppress discord.py's verbose logging
     discord_logger = logging.getLogger('discord')
@@ -47,6 +57,8 @@ class CryptoWatchBot(commands.Bot):
         intents = discord.Intents.default()
         intents.guilds = True
         intents.message_content = True  # For crypto commands
+        intents.members = True  # For member events (privileged)
+        intents.presences = True  # For presence updates (privileged)
         
         super().__init__(
             command_prefix='!',
@@ -63,6 +75,7 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(TimezoneCog(self, self.config))
         await self.add_cog(MarketEventsCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
+        await self.add_cog(AutoUpdatesCog(self, self.config))
         
         self.logger.info("All cogs loaded successfully")
     

@@ -45,8 +45,8 @@ class CryptoDataCog(commands.Cog):
                     )
                     
                     for i, rate in enumerate(rates, 1):
-                        symbol = rate['inst_id'].replace('-USDT', '')
-                        funding = rate['current_rate'] * 100
+                        symbol = rate['instId'].replace('-USDT', '')
+                        funding = float(rate['currentRate']) * 100
                         embed.add_field(
                             name=f"{i}. {symbol}",
                             value=f"{funding:.4f}%",
@@ -85,9 +85,9 @@ class CryptoDataCog(commands.Cog):
                     )
                     
                     for rate in rates:
-                        symbol = rate['inst_id'].replace('-USDT', '')
-                        current = rate['current_rate'] * 100
-                        previous = rate.get('prev_rate', 0) * 100
+                        symbol = rate['instId'].replace('-USDT', '')
+                        current = float(rate['currentRate']) * 100
+                        previous = float(rate.get('prevRate', 0)) * 100
                         
                         embed.add_field(
                             name=symbol,
@@ -127,9 +127,9 @@ class CryptoDataCog(commands.Cog):
                     )
                     
                     for rate in rates:
-                        symbol = rate['inst_id'].replace('-USDT', '')
-                        current = rate['current_rate'] * 100
-                        change = rate.get('rate_change', 0) * 100
+                        symbol = rate['instId'].replace('-USDT', '')
+                        current = float(rate['currentRate']) * 100
+                        change = float(rate.get('rateChange', 0)) * 100
                         
                         embed.add_field(
                             name=symbol,
@@ -146,6 +146,111 @@ class CryptoDataCog(commands.Cog):
             logger.error(f"Error in improving command: {e}")
             await ctx.send("❌ An error occurred")
     
+    @commands.command(name='scanner', aliases=['scan'])
+    async def funding_scanner(self, ctx):
+        """Show comprehensive funding scanner data
+        Usage: !scanner
+        """
+        try:
+            async with self.session.get(f"{self.api_base}/funding-scanner-data") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    embed = discord.Embed(
+                        title="🔍 Funding Scanner Overview",
+                        description="Complete market funding analysis",
+                        color=discord.Color.gold(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Add statistics if available
+                    stats = data.get('stats')
+                    if stats:
+                        embed.add_field(
+                            name="📊 Market Stats",
+                            value=(
+                                f"Total Coins: {stats.get('total_coins', 0)}\n"
+                                f"Negative: {stats.get('negative_count', 0)}\n"
+                                f"Extreme (<-0.1%): {stats.get('extreme_negative', 0)}"
+                            ),
+                            inline=True
+                        )
+                    
+                    # Top movers
+                    rates = data.get('rates', [])
+                    if rates:
+                        # Most negative
+                        top_negative = sorted(rates, key=lambda x: float(x.get('currentRate', 0)))[:3]
+                        if top_negative:
+                            value = "\n".join([
+                                f"{r['instId'].replace('-USDT', '')}: {float(r['currentRate'])*100:.3f}%"
+                                for r in top_negative
+                            ])
+                            embed.add_field(name="🔴 Most Negative", value=value, inline=True)
+                        
+                        # Biggest changes
+                        biggest_changes = sorted(rates, 
+                            key=lambda x: abs(float(x.get('rateChange', 0))), 
+                            reverse=True
+                        )[:3]
+                        if biggest_changes:
+                            value = "\n".join([
+                                f"{r['instId'].replace('-USDT', '')}: {float(r.get('rateChange', 0))*100:+.3f}%"
+                                for r in biggest_changes
+                            ])
+                            embed.add_field(name="🚀 Biggest Moves", value=value, inline=True)
+                    
+                    embed.set_footer(text="Use specific commands for detailed views")
+                    await ctx.send(embed=embed)
+                else:
+                    await ctx.send("❌ Failed to fetch scanner data")
+                    
+        except Exception as e:
+            logger.error(f"Error in scanner command: {e}")
+            await ctx.send("❌ An error occurred")
+    
+    @commands.command(name='worsening', aliases=['w'])
+    async def worsening_rates(self, ctx, limit: int = 6):
+        """Show worsening negative rates
+        Usage: !worsening [limit]
+        """
+        try:
+            async with self.session.get(f"{self.api_base}/worsening-negative") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    rates = data.get('rates', [])[:limit]
+                    
+                    if not rates:
+                        await ctx.send("📊 No worsening negative rates found")
+                        return
+                    
+                    embed = discord.Embed(
+                        title="📉 Worsening Negative Rates",
+                        description="Getting more negative - potential shorts building",
+                        color=discord.Color.dark_red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    for rate in rates:
+                        symbol = rate['instId'].replace('-USDT', '')
+                        current = float(rate['currentRate']) * 100
+                        change = float(rate.get('rateChange', 0)) * 100
+                        
+                        embed.add_field(
+                            name=symbol,
+                            value=f"{current:.3f}%\n↘️ {change:.3f}%",
+                            inline=True
+                        )
+                    
+                    embed.set_footer(text="More shorts entering = potential squeeze later")
+                    await ctx.send(embed=embed)
+                else:
+                    await ctx.send("❌ Failed to fetch data")
+                    
+        except Exception as e:
+            logger.error(f"Error in worsening command: {e}")
+            await ctx.send("❌ An error occurred")
+    
     @commands.command(name='cryptohelp', aliases=['ch'])
     async def crypto_help(self, ctx):
         """Show crypto commands help"""
@@ -158,16 +263,18 @@ class CryptoDataCog(commands.Cog):
         embed.add_field(
             name="Commands",
             value=(
+                "`!scanner` - Full market overview\n"
                 "`!funding [n]` - Top n most negative rates\n"
                 "`!turned [n]` - Coins that turned positive\n"
                 "`!improving [n]` - Negative but improving\n"
+                "`!worsening [n]` - Getting more negative\n"
             ),
             inline=False
         )
         
         embed.add_field(
             name="Aliases",
-            value="`!f` = funding, `!t` = turned, `!i` = improving",
+            value="`!scan` = scanner, `!f` = funding, `!t` = turned, `!i` = improving, `!w` = worsening",
             inline=False
         )
         
