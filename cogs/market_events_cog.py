@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 from pytz import timezone
+import asyncio
 import logging
 import os
 
@@ -260,17 +261,23 @@ class MarketEventsCog(commands.Cog):
     
     @update_market_events.before_loop
     async def before_market_update(self):
-        """Wait for bot to be ready and sync to 5-minute intervals"""
+        """Wait for bot to be ready and do immediate update"""
         await self.bot.wait_until_ready()
         
+        # Do an immediate update first
+        logger.info("Performing immediate market events update...")
+        await self.update_market_events()
+        
+        # Then wait until next 5-minute mark
         now = datetime.now()
         minutes_to_wait = 5 - (now.minute % 5)
         if minutes_to_wait == 5:
             minutes_to_wait = 0
         seconds_to_wait = minutes_to_wait * 60 - now.second
         
-        logger.info(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
-        await asyncio.sleep(seconds_to_wait)
+        if seconds_to_wait > 0:
+            logger.info(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
+            await asyncio.sleep(seconds_to_wait)
 
 async def setup(bot):
     pass

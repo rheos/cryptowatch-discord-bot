@@ -56,11 +56,11 @@ class AutoUpdatesCog(commands.Cog):
                     )
                     
                     # Split into negative and improving
-                    very_negative = [r for r in rates if r['current_rate'] < -0.001]  # < -0.1%
-                    moderate = [r for r in rates if -0.001 <= r['current_rate'] < -0.0005]
+                    very_negative = [r for r in rates if float(r['currentRate']) < -0.001]  # < -0.1%
+                    moderate = [r for r in rates if -0.001 <= float(r['currentRate']) < -0.0005]
                     
                     if very_negative:
-                        symbols = [r['inst_id'].replace('-USDT', '') for r in very_negative[:8]]
+                        symbols = [r['instId'].replace('-USDT', '') for r in very_negative[:8]]
                         embed.add_field(
                             name="🔴 Extreme Negative (< -0.1%)",
                             value=", ".join(symbols),
@@ -68,7 +68,7 @@ class AutoUpdatesCog(commands.Cog):
                         )
                     
                     if moderate:
-                        symbols = [r['inst_id'].replace('-USDT', '') for r in moderate[:8]]
+                        symbols = [r['instId'].replace('-USDT', '') for r in moderate[:8]]
                         embed.add_field(
                             name="🟡 Moderate Negative",
                             value=", ".join(symbols),
@@ -81,7 +81,7 @@ class AutoUpdatesCog(commands.Cog):
                             turned_data = await resp2.json()
                             turned = turned_data.get('rates', [])[:5]
                             if turned:
-                                symbols = [r['inst_id'].replace('-USDT', '') for r in turned]
+                                symbols = [r['instId'].replace('-USDT', '') for r in turned]
                                 embed.add_field(
                                     name="🟢 Recently Turned Positive",
                                     value=", ".join(symbols),
@@ -109,7 +109,7 @@ class AutoUpdatesCog(commands.Cog):
                     rates = data.get('rates', [])
                     
                     # Alert if any coin has funding < -0.2%
-                    extreme = [r for r in rates if r['current_rate'] < -0.002]
+                    extreme = [r for r in rates if float(r['currentRate']) < -0.002]
                     
                     if extreme:
                         embed = discord.Embed(
@@ -120,8 +120,8 @@ class AutoUpdatesCog(commands.Cog):
                         )
                         
                         for rate in extreme[:5]:
-                            symbol = rate['inst_id'].replace('-USDT', '')
-                            funding = rate['current_rate'] * 100
+                            symbol = rate['instId'].replace('-USDT', '')
+                            funding = float(rate['currentRate']) * 100
                             embed.add_field(
                                 name=symbol,
                                 value=f"{funding:.3f}%",
