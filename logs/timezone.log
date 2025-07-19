@@ -758,3 +758,165 @@ aiohttp.client_exceptions.ClientConnectorDNSError: Cannot connect to host discor
 2025-07-18 19:21:54,988 - INFO - Updated Australia/Brisbane → Brisbane 12:20pm
 2025-07-18 19:21:55,174 - INFO - Updated Europe/Istanbul → Istanbul 5:20am
 2025-07-18 19:21:55,388 - INFO - Updated Asia/Kolkata → India 7:50am
+2025-07-18 19:25:00,888 - INFO - Updating timezone channels...
+2025-07-18 19:25:18,718 - INFO - Updated America/Vancouver → Vancouver 7:25pm
+2025-07-18 19:25:18,903 - INFO - Updated America/Halifax → PEI 11:25pm
+2025-07-18 19:25:19,107 - INFO - Updated Australia/Brisbane → Brisbane 12:25pm
+2025-07-18 19:25:19,387 - INFO - Updated Europe/Istanbul → Istanbul 5:25am
+2025-07-18 19:25:24,737 - INFO - Updated Asia/Kolkata → India 7:55am
+2025-07-18 19:30:00,889 - INFO - Updating timezone channels...
+2025-07-18 19:30:01,243 - INFO - Updated America/Vancouver → Vancouver 7:30pm
+2025-07-18 19:31:55,339 - INFO - Updated America/Halifax → PEI 11:30pm
+2025-07-18 19:31:55,575 - INFO - Updated Australia/Brisbane → Brisbane 12:30pm
+2025-07-18 19:31:55,806 - INFO - Updated Europe/Istanbul → Istanbul 5:30am
+2025-07-18 19:31:56,045 - INFO - Updated Asia/Kolkata → India 8:00am
+2025-07-18 19:35:00,865 - INFO - Updating timezone channels...
+2025-07-18 19:35:19,349 - INFO - Updated America/Vancouver → Vancouver 7:35pm
+2025-07-18 19:35:19,610 - INFO - Updated America/Halifax → PEI 11:35pm
+2025-07-18 19:35:19,876 - INFO - Updated Australia/Brisbane → Brisbane 12:35pm
+2025-07-18 19:35:20,176 - INFO - Updated Europe/Istanbul → Istanbul 5:35am
+2025-07-18 19:35:24,958 - INFO - Updated Asia/Kolkata → India 8:05am
+2025-07-18 19:40:00,888 - INFO - Updating timezone channels...
+2025-07-18 19:40:01,252 - INFO - Updated America/Vancouver → Vancouver 7:40pm
+2025-07-18 19:41:55,863 - INFO - Updated America/Halifax → PEI 11:40pm
+2025-07-18 19:41:56,112 - INFO - Updated Australia/Brisbane → Brisbane 12:40pm
+2025-07-18 19:41:56,390 - INFO - Updated Europe/Istanbul → Istanbul 5:40am
+2025-07-18 19:41:56,628 - INFO - Updated Asia/Kolkata → India 8:10am
+2025-07-18 19:45:00,889 - INFO - Updating timezone channels...
+2025-07-18 19:45:19,630 - INFO - Updated America/Vancouver → Vancouver 7:45pm
+2025-07-18 19:45:19,843 - INFO - Updated America/Halifax → PEI 11:45pm
+2025-07-18 19:45:20,027 - INFO - Updated Australia/Brisbane → Brisbane 12:45pm
+2025-07-18 19:45:20,248 - INFO - Updated Europe/Istanbul → Istanbul 5:45am
+2025-07-18 19:45:25,127 - INFO - Updated Asia/Kolkata → India 8:15am
+2025-07-18 19:50:00,803 - INFO - Updating timezone channels...
+2025-07-18 19:50:01,162 - INFO - Updated America/Vancouver → Vancouver 7:50pm
+2025-07-18 19:51:56,080 - INFO - Updated America/Halifax → PEI 11:50pm
+2025-07-18 19:51:56,292 - INFO - Updated Australia/Brisbane → Brisbane 12:50pm
+2025-07-18 19:51:56,560 - INFO - Updated Europe/Istanbul → Istanbul 5:50am
+2025-07-18 19:51:56,846 - INFO - Updated Asia/Kolkata → India 8:20am
+2025-07-18 19:55:00,883 - INFO - Updating timezone channels...
+2025-07-18 19:55:19,913 - INFO - Updated America/Vancouver → Vancouver 7:55pm
+2025-07-18 19:55:20,106 - INFO - Updated America/Halifax → PEI 11:55pm
+2025-07-18 19:55:20,397 - INFO - Updated Australia/Brisbane → Brisbane 12:55pm
+2025-07-18 19:55:20,577 - INFO - Updated Europe/Istanbul → Istanbul 5:55am
+2025-07-18 19:55:25,205 - INFO - Updated Asia/Kolkata → India 8:25am
+2025-07-18 20:00:00,881 - INFO - Updating timezone channels...
+2025-07-18 20:00:01,269 - INFO - Updated America/Vancouver → Vancouver 8:00pm
+2025-07-18 20:01:56,399 - INFO - Updated America/Halifax → PEI 12:00am
+2025-07-18 20:01:56,638 - INFO - Updated Australia/Brisbane → Brisbane 1:00pm
+2025-07-18 20:01:56,895 - INFO - Updated Europe/Istanbul → Istanbul 6:00am
+2025-07-18 20:01:57,103 - INFO - Updated Asia/Kolkata → India 8:30am
+2025-07-18 20:05:00,896 - INFO - Updating timezone channels...
+2025-07-18 20:05:20,251 - INFO - Updated America/Vancouver → Vancouver 8:05pm
+2025-07-18 20:05:20,464 - INFO - Updated America/Halifax → PEI 12:05am
+2025-07-18 20:05:20,666 - INFO - Updated Australia/Brisbane → Brisbane 1:05pm
+2025-07-18 20:05:20,854 - INFO - Updated Europe/Istanbul → Istanbul 6:05am
+2025-07-18 20:05:25,416 - INFO - Updated Asia/Kolkata → India 8:35am
+2025-07-18 20:10:00,885 - INFO - Updating timezone channels...
+2025-07-18 20:10:01,414 - INFO - Updated America/Vancouver → Vancouver 8:10pm
+2025-07-18 20:11:56,834 - INFO - Updated America/Halifax → PEI 12:10am
+2025-07-18 20:11:57,022 - INFO - Updated Australia/Brisbane → Brisbane 1:10pm
+2025-07-18 20:11:57,280 - INFO - Updated Europe/Istanbul → Istanbul 6:10am
+2025-07-18 20:11:57,497 - INFO - Updated Asia/Kolkata → India 8:40am
+2025-07-18 20:15:00,886 - INFO - Updating timezone channels...
+2025-07-18 20:15:20,526 - INFO - Updated America/Vancouver → Vancouver 8:15pm
+2025-07-18 20:15:20,839 - INFO - Updated America/Halifax → PEI 12:15am
+2025-07-18 20:15:21,031 - INFO - Updated Australia/Brisbane → Brisbane 1:15pm
+2025-07-18 20:15:21,232 - INFO - Updated Europe/Istanbul → Istanbul 6:15am
+2025-07-18 20:15:25,568 - INFO - Updated Asia/Kolkata → India 8:45am
+2025-07-18 20:20:00,997 - INFO - Updating timezone channels...
+2025-07-18 20:20:01,416 - INFO - Updated America/Vancouver → Vancouver 8:20pm
+2025-07-18 20:21:57,474 - INFO - Updated America/Halifax → PEI 12:20am
+2025-07-18 20:21:57,718 - INFO - Updated Australia/Brisbane → Brisbane 1:20pm
+2025-07-18 20:21:58,008 - INFO - Updated Europe/Istanbul → Istanbul 6:20am
+2025-07-18 20:21:58,267 - INFO - Updated Asia/Kolkata → India 8:50am
+2025-07-18 20:25:00,891 - INFO - Updating timezone channels...
+2025-07-18 20:25:20,992 - INFO - Updated America/Vancouver → Vancouver 8:25pm
+2025-07-18 20:25:21,183 - INFO - Updated America/Halifax → PEI 12:25am
+2025-07-18 20:25:21,426 - INFO - Updated Australia/Brisbane → Brisbane 1:25pm
+2025-07-18 20:25:21,717 - INFO - Updated Europe/Istanbul → Istanbul 6:25am
+2025-07-18 20:25:25,909 - INFO - Updated Asia/Kolkata → India 8:55am
+2025-07-18 20:30:00,893 - INFO - Updating timezone channels...
+2025-07-18 20:30:01,176 - INFO - Updated America/Vancouver → Vancouver 8:30pm
+2025-07-18 20:31:57,761 - INFO - Updated America/Halifax → PEI 12:30am
+2025-07-18 20:31:58,045 - INFO - Updated Australia/Brisbane → Brisbane 1:30pm
+2025-07-18 20:31:58,231 - INFO - Updated Europe/Istanbul → Istanbul 6:30am
+2025-07-18 20:31:58,436 - INFO - Updated Asia/Kolkata → India 9:00am
+2025-07-18 20:35:00,901 - INFO - Updating timezone channels...
+2025-07-18 20:35:21,354 - INFO - Updated America/Vancouver → Vancouver 8:35pm
+2025-07-18 20:35:21,641 - INFO - Updated America/Halifax → PEI 12:35am
+2025-07-18 20:35:21,826 - INFO - Updated Australia/Brisbane → Brisbane 1:35pm
+2025-07-18 20:35:22,043 - INFO - Updated Europe/Istanbul → Istanbul 6:35am
+2025-07-18 20:35:26,348 - INFO - Updated Asia/Kolkata → India 9:05am
+2025-07-18 20:40:00,903 - INFO - Updating timezone channels...
+2025-07-18 20:40:01,392 - INFO - Updated America/Vancouver → Vancouver 8:40pm
+2025-07-18 20:41:58,188 - INFO - Updated America/Halifax → PEI 12:40am
+2025-07-18 20:41:58,409 - INFO - Updated Australia/Brisbane → Brisbane 1:40pm
+2025-07-18 20:41:58,662 - INFO - Updated Europe/Istanbul → Istanbul 6:40am
+2025-07-18 20:41:58,927 - INFO - Updated Asia/Kolkata → India 9:10am
+2025-07-18 20:45:00,893 - INFO - Updating timezone channels...
+2025-07-18 20:45:21,711 - INFO - Updated America/Vancouver → Vancouver 8:45pm
+2025-07-18 20:45:21,944 - INFO - Updated America/Halifax → PEI 12:45am
+2025-07-18 20:45:22,148 - INFO - Updated Australia/Brisbane → Brisbane 1:45pm
+2025-07-18 20:45:22,446 - INFO - Updated Europe/Istanbul → Istanbul 6:45am
+2025-07-18 20:45:26,414 - INFO - Updated Asia/Kolkata → India 9:15am
+2025-07-18 20:50:00,895 - INFO - Updating timezone channels...
+2025-07-18 20:50:01,231 - INFO - Updated America/Vancouver → Vancouver 8:50pm
+2025-07-18 20:51:58,590 - INFO - Updated America/Halifax → PEI 12:50am
+2025-07-18 20:51:58,821 - INFO - Updated Australia/Brisbane → Brisbane 1:50pm
+2025-07-18 20:51:58,992 - INFO - Updated Europe/Istanbul → Istanbul 6:50am
+2025-07-18 20:51:59,243 - INFO - Updated Asia/Kolkata → India 9:20am
+2025-07-18 20:55:00,892 - INFO - Updating timezone channels...
+2025-07-18 20:55:22,131 - INFO - Updated America/Vancouver → Vancouver 8:55pm
+2025-07-18 20:55:22,366 - INFO - Updated America/Halifax → PEI 12:55am
+2025-07-18 20:55:22,776 - INFO - Updated Australia/Brisbane → Brisbane 1:55pm
+2025-07-18 20:55:22,974 - INFO - Updated Europe/Istanbul → Istanbul 6:55am
+2025-07-18 20:55:26,849 - INFO - Updated Asia/Kolkata → India 9:25am
+2025-07-18 21:00:00,896 - INFO - Updating timezone channels...
+2025-07-18 21:00:01,463 - INFO - Updated America/Vancouver → Vancouver 9:00pm
+2025-07-18 21:01:59,008 - INFO - Updated America/Halifax → PEI 1:00am
+2025-07-18 21:01:59,240 - INFO - Updated Australia/Brisbane → Brisbane 2:00pm
+2025-07-18 21:01:59,580 - INFO - Updated Europe/Istanbul → Istanbul 7:00am
+2025-07-18 21:01:59,810 - INFO - Updated Asia/Kolkata → India 9:30am
+2025-07-18 21:05:00,893 - INFO - Updating timezone channels...
+2025-07-18 21:05:22,432 - INFO - Updated America/Vancouver → Vancouver 9:05pm
+2025-07-18 21:05:22,613 - INFO - Updated America/Halifax → PEI 1:05am
+2025-07-18 21:05:22,919 - INFO - Updated Australia/Brisbane → Brisbane 2:05pm
+2025-07-18 21:05:23,157 - INFO - Updated Europe/Istanbul → Istanbul 7:05am
+2025-07-18 21:05:27,025 - INFO - Updated Asia/Kolkata → India 9:35am
+2025-07-18 21:10:00,902 - INFO - Updating timezone channels...
+2025-07-18 21:10:01,216 - INFO - Updated America/Vancouver → Vancouver 9:10pm
+2025-07-18 21:11:59,461 - INFO - Updated America/Halifax → PEI 1:10am
+2025-07-18 21:11:59,779 - INFO - Updated Australia/Brisbane → Brisbane 2:10pm
+2025-07-18 21:12:00,028 - INFO - Updated Europe/Istanbul → Istanbul 7:10am
+2025-07-18 21:12:00,255 - INFO - Updated Asia/Kolkata → India 9:40am
+2025-07-18 21:15:00,893 - INFO - Updating timezone channels...
+2025-07-18 21:15:22,836 - INFO - Updated America/Vancouver → Vancouver 9:15pm
+2025-07-18 21:15:23,047 - INFO - Updated America/Halifax → PEI 1:15am
+2025-07-18 21:15:23,307 - INFO - Updated Australia/Brisbane → Brisbane 2:15pm
+2025-07-18 21:15:23,566 - INFO - Updated Europe/Istanbul → Istanbul 7:15am
+2025-07-18 21:15:27,248 - INFO - Updated Asia/Kolkata → India 9:45am
+2025-07-18 21:20:00,895 - INFO - Updating timezone channels...
+2025-07-18 21:20:01,286 - INFO - Updated America/Vancouver → Vancouver 9:20pm
+2025-07-18 21:21:59,685 - INFO - Updated America/Halifax → PEI 1:20am
+2025-07-18 21:21:59,983 - INFO - Updated Australia/Brisbane → Brisbane 2:20pm
+2025-07-18 21:22:00,457 - INFO - Updated Europe/Istanbul → Istanbul 7:20am
+2025-07-18 21:22:00,723 - INFO - Updated Asia/Kolkata → India 9:50am
+2025-07-18 21:25:00,890 - INFO - Updating timezone channels...
+2025-07-18 21:25:23,163 - INFO - Updated America/Vancouver → Vancouver 9:25pm
+2025-07-18 21:25:23,411 - INFO - Updated America/Halifax → PEI 1:25am
+2025-07-18 21:25:23,671 - INFO - Updated Australia/Brisbane → Brisbane 2:25pm
+2025-07-18 21:25:23,960 - INFO - Updated Europe/Istanbul → Istanbul 7:25am
+2025-07-18 21:25:27,664 - INFO - Updated Asia/Kolkata → India 9:55am
+2025-07-18 21:30:00,891 - INFO - Updating timezone channels...
+2025-07-18 21:30:01,298 - INFO - Updated America/Vancouver → Vancouver 9:30pm
+2025-07-18 21:32:00,109 - INFO - Updated America/Halifax → PEI 1:30am
+2025-07-18 21:32:00,426 - INFO - Updated Australia/Brisbane → Brisbane 2:30pm
+2025-07-18 21:32:00,680 - INFO - Updated Europe/Istanbul → Istanbul 7:30am
+2025-07-18 21:32:00,886 - INFO - Updated Asia/Kolkata → India 10:00am
+2025-07-18 21:35:00,889 - INFO - Updating timezone channels...
+2025-07-18 21:35:23,543 - INFO - Updated America/Vancouver → Vancouver 9:35pm
+2025-07-18 21:35:23,737 - INFO - Updated America/Halifax → PEI 1:35am
+2025-07-18 21:35:23,941 - INFO - Updated Australia/Brisbane → Brisbane 2:35pm
+2025-07-18 21:35:24,149 - INFO - Updated Europe/Istanbul → Istanbul 7:35am
+2025-07-18 21:35:27,753 - INFO - Updated Asia/Kolkata → India 10:05am
