@@ -60,7 +60,7 @@ class CryptoDataCog(commands.Cog):
                     await ctx.send("❌ Failed to fetch funding rates")
                     
         except Exception as e:
-            logger.error(f"Error in funding command: {e}")
+            logger.error(f"Error in negative command: {e}")
             await ctx.send("❌ An error occurred")
     
     @commands.command(name='turned', aliases=['t'])
@@ -88,7 +88,9 @@ class CryptoDataCog(commands.Cog):
                     for rate in rates:
                         symbol = rate['instId'].replace('-USDT', '')
                         current = float(rate['currentRate']) * 100
-                        previous = float(rate.get('prevRate', 0)) * 100
+                        # Get previous rate from changes.prev.rate
+                        prev_data = rate.get('changes', {}).get('prev', {})
+                        previous = float(prev_data.get('rate', 0)) * 100
                         
                         embed.add_field(
                             name=symbol,
@@ -130,7 +132,11 @@ class CryptoDataCog(commands.Cog):
                     for rate in rates:
                         symbol = rate['instId'].replace('-USDT', '')
                         current = float(rate['currentRate']) * 100
-                        change = float(rate.get('rateChange', 0)) * 100
+                        # Get change from the changes object
+                        changes = rate.get('changes', {})
+                        # Get the first available timeframe
+                        timeframe_data = changes.get('24h') or changes.get('12h') or changes.get('8h') or changes.get('4h') or {}
+                        change = float(timeframe_data.get('change', 0)) * 100
                         
                         embed.add_field(
                             name=symbol,
@@ -262,7 +268,11 @@ class CryptoDataCog(commands.Cog):
                     for rate in rates:
                         symbol = rate['instId'].replace('-USDT', '')
                         current = float(rate['currentRate']) * 100
-                        change = float(rate.get('rateChange', 0)) * 100
+                        # Get change from the changes object
+                        changes = rate.get('changes', {})
+                        # Get the first available timeframe
+                        timeframe_data = changes.get('24h') or changes.get('12h') or changes.get('8h') or changes.get('4h') or {}
+                        change = float(timeframe_data.get('change', 0)) * 100
                         
                         embed.add_field(
                             name=symbol,
@@ -288,7 +298,7 @@ class CryptoDataCog(commands.Cog):
             color=discord.Color.blue()
         )
         
-        # Funding commands
+        # Market data commands
         funding_commands = [
             ("!scanner", "!scan", "📊 Market overview & statistics"),
             ("!negative [n]", "!n", "🔴 Most Negative (extreme rates)"),

@@ -109,3 +109,139 @@
 2025-07-18 14:15:06,283 - INFO - Updated pinned market times message
 2025-07-18 14:20:05,916 - INFO - Updated market event channel → 🎯 Asia Open in 2h 40m
 2025-07-18 14:20:06,370 - INFO - Updated pinned market times message
+2025-07-18 14:25:05,942 - INFO - Updated market event channel → 🎯 Asia Open in 2h 35m
+2025-07-18 14:25:06,371 - INFO - Updated pinned market times message
+2025-07-18 14:30:05,909 - INFO - Updated market event channel → 🎯 Asia Open in 2h 30m
+2025-07-18 14:30:06,625 - INFO - Updated pinned market times message
+2025-07-18 14:35:05,958 - INFO - Updated market event channel → 🎯 Asia Open in 2h 25m
+2025-07-18 14:35:06,502 - INFO - Updated pinned market times message
+2025-07-18 14:40:05,915 - INFO - Updated market event channel → 🎯 Asia Open in 2h 20m
+2025-07-18 14:40:06,462 - INFO - Updated pinned market times message
+2025-07-18 14:45:06,034 - INFO - Updated market event channel → 🎯 Asia Open in 2h 15m
+2025-07-18 14:45:06,459 - INFO - Updated pinned market times message
+2025-07-18 14:50:05,972 - INFO - Updated market event channel → 🎯 Asia Open in 2h 10m
+2025-07-18 14:50:06,453 - INFO - Updated pinned market times message
+2025-07-18 14:53:56,024 - INFO - Performing immediate market events update...
+2025-07-18 14:55:06,371 - INFO - Updated market event channel → 🎯 Asia Open in 2h 5m
+2025-07-18 14:55:06,927 - INFO - Updated pinned market times message
+2025-07-18 14:55:06,928 - DEBUG - Market event channel already showing 🎯 Asia Open in 2h 5m, skipping update
+2025-07-18 14:55:07,402 - INFO - Updated pinned market times message
+2025-07-18 15:00:07,080 - INFO - Updated market event channel → 🎯 Asia Open in 2h
+2025-07-18 15:00:07,683 - INFO - Updated pinned market times message
+2025-07-18 15:00:23,833 - INFO - Performing immediate market events update...
+2025-07-18 15:00:23,833 - DEBUG - Market event channel already showing 🎯 Asia Open in 2h, skipping update
+2025-07-18 15:00:24,492 - INFO - Updated pinned market times message
+2025-07-18 15:00:24,492 - DEBUG - Market event channel already showing 🎯 Asia Open in 2h, skipping update
+2025-07-18 15:00:24,919 - INFO - Updated pinned market times message
+2025-07-18 15:05:24,826 - INFO - Updated market event channel → 🎯 Asia Open in 1h 55m
+2025-07-18 15:05:25,338 - INFO - Updated pinned market times message
+2025-07-18 15:06:31,519 - INFO - Performing immediate market events update...
+2025-07-18 15:06:31,520 - DEBUG - Market event channel already showing 🎯 Asia Open in 1h 55m, skipping update
+2025-07-18 15:06:32,052 - INFO - Updated pinned market times message
+2025-07-18 15:06:32,052 - INFO - Waiting 208 seconds until next 5-minute mark...
+2025-07-18 15:10:00,398 - INFO - Updated market event channel → 🎯 Asia Open in 1h 50m
+2025-07-18 15:10:00,838 - INFO - Updated pinned market times message
+2025-07-18 15:15:25,079 - INFO - Updated market event channel → 🎯 Asia Open in 1h 45m
+2025-07-18 15:15:25,548 - INFO - Updated pinned market times message
+2025-07-18 15:20:00,552 - INFO - Updated market event channel → 🎯 Asia Open in 1h 40m
+2025-07-18 15:20:01,088 - INFO - Updated pinned market times message
+2025-07-18 15:25:25,420 - INFO - Updated market event channel → 🎯 Asia Open in 1h 35m
+2025-07-18 15:25:25,875 - INFO - Updated pinned market times message
+2025-07-18 15:30:00,350 - INFO - Updated market event channel → 🎯 Asia Open in 1h 30m
+2025-07-18 15:30:00,957 - INFO - Updated pinned market times message
+2025-07-18 15:35:25,701 - INFO - Updated market event channel → 🎯 Asia Open in 1h 25m
+2025-07-18 15:35:26,239 - INFO - Updated pinned market times message
+2025-07-18 15:40:00,567 - INFO - Updated market event channel → 🎯 Asia Open in 1h 20m
+2025-07-18 15:40:01,070 - INFO - Updated pinned market times message
+2025-07-18 15:45:26,025 - INFO - Updated market event channel → 🎯 Asia Open in 1h 15m
+2025-07-18 15:45:26,475 - INFO - Updated pinned market times message
+2025-07-18 15:50:00,405 - INFO - Updated market event channel → 🎯 Asia Open in 1h 10m
+2025-07-18 15:50:00,883 - INFO - Updated pinned market times message
+2025-07-18 15:55:26,355 - INFO - Updated market event channel → 🎯 Asia Open in 1h 5m
+2025-07-18 15:55:27,234 - INFO - Updated pinned market times message
+2025-07-18 16:00:00,462 - INFO - Updated market event channel → 🎯 Asia Open in 1h
+2025-07-18 16:00:01,164 - INFO - Updated pinned market times message
+2025-07-18 16:05:26,704 - INFO - Updated market event channel → 🎯 Asia Open in 55m
+2025-07-18 16:05:27,196 - INFO - Updated pinned market times message
+2025-07-18 16:10:00,679 - INFO - Updated market event channel → 🎯 Asia Open in 50m
+2025-07-18 16:10:01,128 - INFO - Updated pinned market times message
+2025-07-18 16:15:27,109 - INFO - Updated market event channel → 🎯 Asia Open in 45m
+2025-07-18 16:15:27,823 - INFO - Updated pinned market times message
+2025-07-18 16:20:00,446 - INFO - Updated market event channel → 🎯 Asia Open in 40m
+2025-07-18 16:20:00,918 - INFO - Updated pinned market times message
+2025-07-18 16:25:27,565 - INFO - Updated market event channel → 🎯 Asia Open in 35m
+2025-07-18 16:25:28,010 - INFO - Updated pinned market times message
+2025-07-18 16:30:00,426 - INFO - Updated market event channel → 🎯 Asia Open in 30m
+2025-07-18 16:30:01,020 - INFO - Updated pinned market times message
+2025-07-18 16:35:27,920 - INFO - Updated market event channel → 🎯 Asia Open in 25m
+2025-07-18 16:35:28,613 - INFO - Updated pinned market times message
+2025-07-18 16:40:00,510 - INFO - Updated market event channel → 🎯 Asia Open in 20m
+2025-07-18 16:40:01,032 - INFO - Updated pinned market times message
+2025-07-18 16:45:28,332 - INFO - Updated market event channel → 🎯 Asia Open in 15m
+2025-07-18 16:45:28,862 - INFO - Updated pinned market times message
+2025-07-18 16:50:00,451 - INFO - Updated market event channel → 🎯 Asia Open in 10m
+2025-07-18 16:50:02,256 - INFO - Updated pinned market times message
+2025-07-18 16:55:28,671 - INFO - Updated market event channel → 🎯 Asia Open in 5m
+2025-07-18 16:55:29,115 - INFO - Updated pinned market times message
+2025-07-18 17:00:00,459 - INFO - Updated market event channel → 🎯 Asia Opening Now
+2025-07-18 17:00:00,929 - INFO - Updated pinned market times message
+2025-07-18 17:05:29,088 - INFO - Updated market event channel → 🎯 Asia Open in 23h 55m
+2025-07-18 17:05:29,509 - INFO - Updated pinned market times message
+2025-07-18 17:10:00,423 - INFO - Updated market event channel → 🎯 Asia Open in 23h 50m
+2025-07-18 17:10:01,037 - INFO - Updated pinned market times message
+2025-07-18 17:15:29,469 - INFO - Updated market event channel → 🎯 Asia Open in 23h 45m
+2025-07-18 17:15:30,136 - INFO - Updated pinned market times message
+2025-07-18 17:20:00,586 - INFO - Updated market event channel → 🎯 Asia Open in 23h 40m
+2025-07-18 17:20:01,227 - INFO - Updated pinned market times message
+2025-07-18 17:25:29,788 - INFO - Updated market event channel → 🎯 Asia Open in 23h 35m
+2025-07-18 17:25:30,298 - INFO - Updated pinned market times message
+2025-07-18 17:30:00,379 - INFO - Updated market event channel → 🎯 Asia Open in 23h 30m
+2025-07-18 17:30:00,858 - INFO - Updated pinned market times message
+2025-07-18 17:35:30,208 - INFO - Updated market event channel → 🎯 Asia Open in 23h 25m
+2025-07-18 17:35:30,621 - INFO - Updated pinned market times message
+2025-07-18 17:40:00,539 - INFO - Updated market event channel → 🎯 Asia Open in 23h 20m
+2025-07-18 17:40:01,333 - INFO - Updated pinned market times message
+2025-07-18 17:45:30,478 - INFO - Updated market event channel → 🎯 Asia Open in 23h 15m
+2025-07-18 17:45:30,934 - INFO - Updated pinned market times message
+2025-07-18 17:50:00,601 - INFO - Updated market event channel → 🎯 Asia Open in 23h 10m
+2025-07-18 17:50:01,231 - INFO - Updated pinned market times message
+2025-07-18 17:55:30,789 - INFO - Updated market event channel → 🎯 Asia Open in 23h 5m
+2025-07-18 17:55:31,242 - INFO - Updated pinned market times message
+2025-07-18 18:00:00,515 - INFO - Updated market event channel → 🎯 Asia Open in 23h
+2025-07-18 18:00:01,090 - INFO - Updated pinned market times message
+2025-07-18 18:05:31,328 - INFO - Updated market event channel → 🎯 Asia Open in 22h 55m
+2025-07-18 18:05:31,967 - INFO - Updated pinned market times message
+2025-07-18 18:10:00,480 - INFO - Updated market event channel → 🎯 Asia Open in 22h 50m
+2025-07-18 18:10:00,895 - INFO - Updated pinned market times message
+2025-07-18 18:15:31,717 - INFO - Updated market event channel → 🎯 Asia Open in 22h 45m
+2025-07-18 18:15:33,481 - INFO - Updated pinned market times message
+2025-07-18 18:20:02,772 - INFO - Updated market event channel → 🎯 Asia Open in 22h 40m
+2025-07-18 18:20:05,729 - INFO - Updated pinned market times message
+2025-07-18 18:25:32,108 - INFO - Updated market event channel → 🎯 Asia Open in 22h 35m
+2025-07-18 18:25:32,866 - INFO - Updated pinned market times message
+2025-07-18 18:30:00,822 - INFO - Updated market event channel → 🎯 Asia Open in 22h 30m
+2025-07-18 18:30:01,380 - INFO - Updated pinned market times message
+2025-07-18 18:35:32,405 - INFO - Updated market event channel → 🎯 Asia Open in 22h 25m
+2025-07-18 18:35:32,868 - INFO - Updated pinned market times message
+2025-07-18 18:40:00,480 - INFO - Updated market event channel → 🎯 Asia Open in 22h 20m
+2025-07-18 18:40:01,033 - INFO - Updated pinned market times message
+2025-07-18 18:45:32,649 - INFO - Updated market event channel → 🎯 Asia Open in 22h 15m
+2025-07-18 18:45:33,125 - INFO - Updated pinned market times message
+2025-07-18 18:50:00,417 - INFO - Updated market event channel → 🎯 Asia Open in 22h 10m
+2025-07-18 18:50:00,883 - INFO - Updated pinned market times message
+2025-07-18 18:55:32,926 - INFO - Updated market event channel → 🎯 Asia Open in 22h 5m
+2025-07-18 18:55:33,489 - INFO - Updated pinned market times message
+2025-07-18 19:00:00,431 - INFO - Updated market event channel → 🎯 Asia Open in 22h
+2025-07-18 19:00:01,162 - INFO - Updated pinned market times message
+2025-07-18 19:05:33,126 - INFO - Updated market event channel → 🎯 Asia Open in 21h 55m
+2025-07-18 19:05:33,531 - INFO - Updated pinned market times message
+2025-07-18 19:10:00,495 - INFO - Updated market event channel → 🎯 Asia Open in 21h 50m
+2025-07-18 19:10:01,051 - INFO - Updated pinned market times message
+2025-07-18 19:15:33,338 - INFO - Updated market event channel → 🎯 Asia Open in 21h 45m
+2025-07-18 19:15:33,797 - INFO - Updated pinned market times message
+2025-07-18 19:17:17,940 - INFO - Performing immediate market events update...
+2025-07-18 19:17:18,146 - INFO - Updated market event channel → 🎯 Asia Open in 21h 40m
+2025-07-18 19:17:18,578 - INFO - Updated pinned market times message
+2025-07-18 19:17:18,579 - INFO - Waiting 162 seconds until next 5-minute mark...
+2025-07-18 19:20:00,525 - DEBUG - Market event channel already showing 🎯 Asia Open in 21h 40m, skipping update
+2025-07-18 19:20:01,171 - INFO - Updated pinned market times message
