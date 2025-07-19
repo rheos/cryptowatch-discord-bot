@@ -1,0 +1,32 @@
+{
+  "bot_token": "MTM5NTQ3MDUxOTcxNjkzNzg2MA.GYSFNW.dnraYVYVC70L8G4jSUphaMnGw6jKQr7tM2zmXg",
+  "server_name": "PRODUCTION - CryptoWatch",
+  "timezone_channels": [
+    {
+      "timezone": "America/Vancouver",
+      "channel_id": 1394725769883812091
+    },
+    {
+      "timezone": "America/Halifax", 
+      "channel_id": 1394725860874915860
+    },
+    {
+      "timezone": "Australia/Brisbane",
+      "channel_id": 1394725917846278225
+    },
+    {
+      "timezone": "Europe/Istanbul",
+      "channel_id": 1394733226538303518
+    },
+    {
+      "timezone": "Asia/Kolkata",
+      "channel_id": 1396009752672207028
+    }
+  ],
+  "market_event_channel_id": 1394824388364210218,
+  "market_times_message_channel_id": 1393754229096583278,
+  "auto_update_channels": {
+    "funding": 1396013344195874856,
+    "alerts": 1396013469416951898
+  }
+}

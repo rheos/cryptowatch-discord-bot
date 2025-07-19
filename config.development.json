@@ -1,0 +1,32 @@
+{
+  "bot_token": "YOUR_NEW_DEV_BOT_TOKEN_HERE",
+  "server_name": "DEVELOPMENT",
+  "timezone_channels": [
+    {
+      "timezone": "America/Vancouver",
+      "channel_id": 1288670815482527795
+    },
+    {
+      "timezone": "America/Halifax", 
+      "channel_id": 1288707677513273376
+    },
+    {
+      "timezone": "Australia/Brisbane",
+      "channel_id": 1288707750376833097
+    },
+    {
+      "timezone": "Europe/Istanbul",
+      "channel_id": 1288707802105143370
+    },
+    {
+      "timezone": "Asia/Kolkata",
+      "channel_id": 1395827299424800788
+    }
+  ],
+  "market_event_channel_id": 1289002378321788989,
+  "market_times_message_channel_id": 1289018406774845451,
+  "auto_update_channels": {
+    "funding": null,
+    "alerts": null
+  }
+}
