@@ -58,6 +58,9 @@ class TimezoneCog(commands.Cog):
                 if channel:
                     try:
                         new_name = self.format_time(tz_name)
+                        current_name = channel.name
+                        logger.debug(f"{tz_name}: Current='{current_name}', Expected='{new_name}'")
+                        
                         # Only update if the name is different
                         if channel.name != new_name:
                             await channel.edit(name=new_name)
