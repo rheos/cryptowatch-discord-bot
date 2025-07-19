@@ -20,6 +20,11 @@ class AutoUpdatesCog(commands.Cog):
         self.funding_channel_id = config.get("auto_update_channels", {}).get("funding")
         self.alerts_channel_id = config.get("auto_update_channels", {}).get("alerts")
         
+        # Track last funding update times
+        self.last_funding_time = None
+        self.last_alert_symbols = set()  # Track alerted symbols to avoid spam
+        self.last_alert_time = None  # Track when we last sent alerts
+        
         # Start scheduled tasks if channels are configured
         if self.funding_channel_id:
             self.update_funding_summary.start()
@@ -35,9 +40,13 @@ class AutoUpdatesCog(commands.Cog):
         if self.session:
             await self.session.close()
     
-    @tasks.loop(hours=4)  # Every 4 hours
+    @tasks.loop(minutes=15)  # Check every 15 minutes for new data (funding updates every 8 hours)
     async def update_funding_summary(self):
-        """Post funding rate summary to designated channel"""
+        """Check for new funding data and post summary if updated
+        
+        Note: BloFin funding rates typically update every 8 hours (00:00, 08:00, 16:00 UTC)
+        but different coins may update at different times, so we check frequently.
+        """
         channel = self.bot.get_channel(self.funding_channel_id)
         if not channel:
             return
@@ -46,7 +55,25 @@ class AutoUpdatesCog(commands.Cog):
             async with self.session.get(f"{self.api_base}/most-negative") as response:
                 if response.status == 200:
                     data = await response.json()
-                    rates = data.get('rates', [])[:20]
+                    rates = data.get('rates', [])
+                    
+                    # Check if we have new funding data
+                    if rates:
+                        # Get the latest funding time from the data
+                        latest_funding_time = max(
+                            rate.get('fundingTime', 0) for rate in rates if rate.get('fundingTime')
+                        )
+                        
+                        # Skip if we've already posted this funding update
+                        if self.last_funding_time and latest_funding_time <= self.last_funding_time:
+                            logger.debug(f"Checked for updates - no new funding data since {datetime.fromtimestamp(self.last_funding_time/1000)} UTC")
+                            return
+                        
+                        logger.info(f"New funding data available! Last: {datetime.fromtimestamp(self.last_funding_time/1000) if self.last_funding_time else 'Never'}, Current: {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
+                        
+                        self.last_funding_time = latest_funding_time
+                    
+                    rates = rates[:20]
                     
                     embed = discord.Embed(
                         title="📊 Funding Rate Summary",
@@ -88,15 +115,16 @@ class AutoUpdatesCog(commands.Cog):
                                     inline=False
                                 )
                     
-                    embed.set_footer(text="Use !funding for detailed rates")
+                    embed.set_footer(text="Use !negative for detailed rates")
                     await channel.send(embed=embed)
+                    logger.info(f"Posted funding summary - latest data from {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
                     
         except Exception as e:
             logger.error(f"Error in funding summary update: {e}")
     
-    @tasks.loop(minutes=30)  # Every 30 minutes
+    @tasks.loop(minutes=15)  # Check every 15 minutes for new data
     async def check_extreme_rates(self):
-        """Alert on extreme funding rate changes"""
+        """Check for extreme funding rates and alert if new"""
         channel = self.bot.get_channel(self.alerts_channel_id)
         if not channel:
             return
@@ -107,6 +135,17 @@ class AutoUpdatesCog(commands.Cog):
                 if response.status == 200:
                     data = await response.json()
                     rates = data.get('rates', [])
+                    
+                    # Check if we have new funding data
+                    if rates:
+                        latest_funding_time = max(
+                            rate.get('fundingTime', 0) for rate in rates if rate.get('fundingTime')
+                        )
+                        
+                        # Skip if this is old data we've already seen
+                        if self.last_funding_time and latest_funding_time <= self.last_funding_time:
+                            logger.debug(f"No new extreme rate data since {datetime.fromtimestamp(self.last_funding_time/1000)} UTC")
+                            return
                     
                     # Alert if any coin has funding < -0.2%
                     extreme = [r for r in rates if float(r['currentRate']) < -0.002]
@@ -130,9 +169,23 @@ class AutoUpdatesCog(commands.Cog):
                         
                         embed.set_footer(text="Potential volatility ahead")
                         
-                        # Only send if we haven't alerted about these in last 2 hours
-                        # (You'd implement alert tracking here)
-                        await channel.send(embed=embed)
+                        # Reset alert tracking after 2 hours
+                        now = datetime.utcnow()
+                        if self.last_alert_time and (now - self.last_alert_time).total_seconds() > 7200:
+                            self.last_alert_symbols = set()
+                            self.last_alert_time = None
+                            logger.info("Reset alert tracking after 2 hours")
+                        
+                        # Only send if we have new extreme rates
+                        extreme_symbols = {r['instId'] for r in extreme}
+                        if not extreme_symbols.issubset(self.last_alert_symbols):
+                            await channel.send(embed=embed)
+                            # Update tracked symbols
+                            self.last_alert_symbols = extreme_symbols
+                            self.last_alert_time = now
+                            logger.info(f"Sent extreme funding alert for: {', '.join(s.replace('-USDT', '') for s in extreme_symbols)}")
+                        else:
+                            logger.debug("Skipping extreme alert - no new symbols")
             
             # Check for coins that just turned positive
             async with self.session.get(f"{self.api_base}/turned-positive") as response:
@@ -140,8 +193,12 @@ class AutoUpdatesCog(commands.Cog):
                     data = await response.json()
                     turned = data.get('rates', [])
                     
-                    # Alert if high-change turnarounds
-                    big_turns = [r for r in turned if r.get('rate_change', 0) > 0.003]  # >0.3% swing
+                    # Alert if high-change turnarounds (using changes.prev.change)
+                    big_turns = []
+                    for r in turned:
+                        prev_change = r.get('changes', {}).get('prev', {}).get('change', 0)
+                        if float(prev_change) > 0.003:  # >0.3% swing
+                            big_turns.append(r)
                     
                     if big_turns:
                         embed = discord.Embed(
@@ -152,8 +209,8 @@ class AutoUpdatesCog(commands.Cog):
                         )
                         
                         for rate in big_turns[:3]:
-                            symbol = rate['inst_id'].replace('-USDT', '')
-                            change = rate.get('rate_change', 0) * 100
+                            symbol = rate['instId'].replace('-USDT', '')
+                            change = float(rate.get('changes', {}).get('prev', {}).get('change', 0)) * 100
                             embed.add_field(
                                 name=symbol,
                                 value=f"↗️ +{change:.3f}% swing",
