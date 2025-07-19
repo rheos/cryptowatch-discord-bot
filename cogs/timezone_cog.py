@@ -14,7 +14,7 @@ class TimezoneCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        self.channels = config.get("channels", [])
+        self.channels = config.get("timezone_channels", config.get("channels", []))
         self.update_timezone_channels.start()
     
     def cog_unload(self):
