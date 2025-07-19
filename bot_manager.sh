@@ -27,7 +27,8 @@ start_bot() {
     BOT_PID=$!
     echo $BOT_PID > "$BOT_PID_FILE"
     echo "Bot started with PID $BOT_PID"
-    echo "Logs: tail -f $BOT_LOG_FILE"
+    echo "Logs: tail -f $SCRIPT_DIR/logs/*.log"
+    echo "Or specific logs: tail -f $SCRIPT_DIR/logs/timezone.log"
 }
 
 stop_bot() {
@@ -78,11 +79,11 @@ status_bot() {
 }
 
 logs_bot() {
-    if [ -f "$BOT_LOG_FILE" ]; then
-        tail -f "$BOT_LOG_FILE"
-    else
-        echo "No log file found"
-    fi
+    echo "Available log files:"
+    ls -la "$SCRIPT_DIR/logs/"*.log 2>/dev/null | grep -v "bot.log" | awk '{print "  - " $9}'
+    echo ""
+    echo "Following all logs (Ctrl+C to stop):"
+    tail -f "$SCRIPT_DIR/logs/"*.log 2>/dev/null | grep -v "==> .*/bot.log <=="
 }
 
 case "$1" in
