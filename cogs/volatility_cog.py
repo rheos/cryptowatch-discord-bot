@@ -17,7 +17,8 @@ class VolatilityCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        self.base_url = "https://example.com/api/volatility-scanner"
+        api_base = config.get('api_base_url', 'https://example.com/api')
+        self.base_url = f"{api_base}/volatility-scanner"
         self.session = None
         self.volatility_alerts.start()
         
