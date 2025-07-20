@@ -159,85 +159,89 @@ class CryptoDataCog(commands.Cog):
         Usage: !scanner
         """
         try:
-            async with self.session.get(f"{self.api_base}/funding-scanner-data") as response:
-                if response.status == 200:
-                    data = await response.json()
+            # Fetch data from multiple endpoints like the web app does
+            endpoints = {
+                'most_negative': f"{self.api_base}/most-negative",
+                'turned_positive': f"{self.api_base}/turned-positive",
+                'worsening': f"{self.api_base}/worsening-negative",
+                'improving': f"{self.api_base}/improving-negative"
+            }
+            
+            results = {}
+            for key, url in endpoints.items():
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        results[key] = data.get('rates', [])
                     
-                    embed = discord.Embed(
-                        title="🔍 Funding Scanner Overview",
-                        description="Complete market funding analysis",
-                        color=discord.Color.gold(),
-                        timestamp=datetime.utcnow()
-                    )
-                    
-                    # Get rates data first
-                    rates = data.get('rates', [])
-                    
-                    # Add statistics if available
-                    stats = data.get('stats', {}).get('overall')
-                    if stats:
-                        # Count negative rates from the rates data
-                        negative_count = sum(1 for r in rates if float(r.get('currentRate', 0)) < 0)
-                        extreme_count = sum(1 for r in rates if float(r.get('currentRate', 0)) < -0.001)
-                        
-                        embed.add_field(
-                            name="📊 Market Stats",
-                            value=(
-                                f"Total Tracked: {stats.get('total_instruments', 0)}\n"
-                                f"Negative Now: {negative_count}\n"
-                                f"Extreme (<-0.1%): {extreme_count}"
-                            ),
-                            inline=True
-                        )
-                    
-                    # Top movers
-                    if rates:
-                        # Most negative (or least positive if no negatives)
-                        sorted_rates = sorted(rates, key=lambda x: float(x.get('currentRate', 0)))
-                        # Get actual negative rates or the least positive ones
-                        negative_rates = [r for r in sorted_rates if float(r.get('currentRate', 0)) < 0]
-                        display_rates = negative_rates[:3] if negative_rates else sorted_rates[:3]
-                        
-                        if display_rates:
-                            value = "\n".join([
-                                f"{r['instId'].replace('-USDT', '')}: {float(r['currentRate'])*100:.3f}%"
-                                for r in display_rates
-                            ])
-                            title = "🔴 Most Negative" if negative_rates else "📈 Least Positive"
-                            embed.add_field(name=title, value=value, inline=True)
-                        
-                        # Biggest changes - look in the changes object
-                        rates_with_changes = []
-                        for r in rates:
-                            changes = r.get('changes', {})
-                            # Get the first available change period
-                            if '24h' in changes:
-                                change_val = float(changes['24h'].get('change', 0))
-                            elif '12h' in changes:
-                                change_val = float(changes['12h'].get('change', 0))
-                            elif '8h' in changes:
-                                change_val = float(changes['8h'].get('change', 0))
-                            else:
-                                change_val = 0
-                            rates_with_changes.append((r, change_val))
-                        
-                        biggest_changes = sorted(rates_with_changes, 
-                            key=lambda x: abs(x[1]), 
-                            reverse=True
-                        )[:3]
-                        
-                        if biggest_changes and any(x[1] != 0 for x in biggest_changes):
-                            value = "\n".join([
-                                f"{r[0]['instId'].replace('-USDT', '')}: {r[1]*100:+.3f}%"
-                                for r in biggest_changes if r[1] != 0
-                            ])
-                            if value:
-                                embed.add_field(name="🚀 Biggest Moves", value=value, inline=True)
-                    
-                    embed.set_footer(text="Use specific commands for detailed views")
-                    await ctx.send(embed=embed)
-                else:
-                    await ctx.send("❌ Failed to fetch scanner data")
+            embed = discord.Embed(
+                title="🔍 Funding Scanner Overview",
+                description="Current market funding rates",
+                color=discord.Color.gold(),
+                timestamp=datetime.utcnow()
+            )
+            
+            # Add Most Negative
+            if results.get('most_negative'):
+                most_neg = results['most_negative'][:3]
+                if most_neg:
+                    value = "\n".join([
+                        f"**{r['instId']}**: {float(r['currentRate'])*100:.3f}%"
+                        for r in most_neg
+                    ])
+                    embed.add_field(name="🔴 Most Negative", value=value, inline=True)
+            
+            # Add Turned Positive
+            if results.get('turned_positive'):
+                turned = results['turned_positive'][:3]
+                if turned:
+                    value = "\n".join([
+                        f"**{r['instId']}**: {float(r['currentRate'])*100:.3f}%"
+                        for r in turned
+                    ])
+                    embed.add_field(name="🟢 Turned Positive", value=value, inline=True)
+            
+            # Add Worsening
+            if results.get('worsening'):
+                worse = results['worsening'][:3]
+                if worse:
+                    value = "\n".join([
+                        f"**{r['instId']}**: {float(r['currentRate'])*100:.3f}%"
+                        for r in worse
+                    ])
+                    embed.add_field(name="🟠 Worsening", value=value, inline=True)
+            
+            # Add Improving
+            if results.get('improving'):
+                improving = results['improving'][:3]
+                if improving:
+                    value = "\n".join([
+                        f"**{r['instId']}**: {float(r['currentRate'])*100:.3f}%"
+                        for r in improving
+                    ])
+                    embed.add_field(name="🟡 Improving", value=value, inline=True)
+            
+            # Add summary stats
+            all_rates = []
+            for rates in results.values():
+                all_rates.extend(rates)
+            
+            # Remove duplicates by instId
+            unique_rates = {}
+            for r in all_rates:
+                unique_rates[r['instId']] = r
+            
+            total_negative = len([r for r in unique_rates.values() if float(r.get('currentRate', 0)) < 0])
+            extreme_negative = len([r for r in unique_rates.values() if float(r.get('currentRate', 0)) < -0.001])
+            
+            embed.add_field(
+                name="📊 Summary",
+                value=f"Negative rates: {total_negative}\nExtreme (<-0.1%): {extreme_negative}\nTotal tracked: {len(unique_rates)}",
+                inline=True
+            )
+            
+            embed.set_footer(text="Use !n, !t, !w, !i for detailed views")
+            await ctx.send(embed=embed)
                     
         except Exception as e:
             logger.error(f"Error in scanner command: {e}")
@@ -320,13 +324,33 @@ class CryptoDataCog(commands.Cog):
             inline=False
         )
         
+        # Volatility commands
+        volatility_commands = [
+            ("!volatility [tf] [%]", "!vola, !move", "🎢 Check volatile coins (e.g. !vola 1h 5)"),
+            ("!movers [tf]", "!top", "🚀 Top gainers/losers (e.g. !movers 24h)"),
+            ("!pricealert COIN [tf] [%]", "!pa", "⚠️ Check specific coin movement")
+        ]
+        
+        vol_commands_text = ""
+        for cmd, alias, desc in volatility_commands:
+            vol_commands_text += f"**{cmd}**"
+            if alias:
+                vol_commands_text += f" or **{alias}**"
+            vol_commands_text += f"\n{desc}\n\n"
+        
+        embed.add_field(
+            name="📊 Volatility Scanner",
+            value=vol_commands_text.strip(),
+            inline=False
+        )
+        
         embed.add_field(
             name="ℹ️ Notes",
             value=(
-                "• Data from BloFin exchange\n"
-                "• Updates every 30 minutes\n"
-                "• Default shows top 10 results\n"
-                "• Example: `!negative 20` shows top 20"
+                "• Funding data from BloFin exchange\n"
+                "• Price data from Binance\n" 
+                "• Updates every 5-30 minutes\n"
+                "• Example: `!n 20` shows top 20"
             ),
             inline=False
         )

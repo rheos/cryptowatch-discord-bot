@@ -17,6 +17,7 @@ from cogs.market_events_cog import MarketEventsCog
 from cogs.crypto_data_cog import CryptoDataCog
 from cogs.auto_updates_cog import AutoUpdatesCog
 from cogs.auto_role_cog import AutoRoleCog
+from cogs.volatility_cog import VolatilityCog
 
 # Set up logging
 def setup_logging():
@@ -108,6 +109,7 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(CryptoDataCog(self, self.config))
         await self.add_cog(AutoUpdatesCog(self, self.config))
         await self.add_cog(AutoRoleCog(self, self.config))
+        await self.add_cog(VolatilityCog(self, self.config))
         
         self.logger.info("All cogs loaded successfully")
     
