@@ -22,3 +22,6 @@ Thumbs.db
 bot.pid
 market_message.id
 bot.log*
+
+# Logs directory
+logs/
