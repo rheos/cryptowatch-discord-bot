@@ -14,7 +14,8 @@ class CryptoDataCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        self.api_base = config.get('api_base_url', 'https://example.com/api')
+        api_base = config.get('api_base_url', 'https://example.com/api')
+        self.api_base = api_base
         self.session = None
     
     async def cog_load(self):
