@@ -301,10 +301,9 @@ class VolatilityCog(commands.Cog):
                     inline=True
                 )
             
-            embed.set_footer(text="React with 🔕 to mute alerts for 1 hour")
+            embed.set_footer(text="Extreme price movements detected")
             
-            message = await channel.send(embed=embed)
-            await message.add_reaction('🔕')
+            await channel.send(embed=embed)
     
     @volatility_alerts.before_loop
     async def before_volatility_alerts(self):
