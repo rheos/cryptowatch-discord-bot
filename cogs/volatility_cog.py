@@ -20,6 +20,7 @@ class VolatilityCog(commands.Cog):
         api_base = config.get('api_base_url', 'https://example.com/api')
         self.base_url = f"{api_base}/volatility-scanner"
         self.session = None
+        self.sent_alerts = {}  # Track alerts: {symbol_timeframe: (percent, timestamp)}
         self.volatility_alerts.start()
         
     def cog_unload(self):
@@ -264,6 +265,14 @@ class VolatilityCog(commands.Cog):
             
         # Collect extreme movers
         alerts = []
+        current_time = datetime.utcnow()
+        
+        # Clean up old alerts (older than 2 hours)
+        self.sent_alerts = {
+            k: v for k, v in self.sent_alerts.items() 
+            if (current_time - v[1]).total_seconds() < 7200
+        }
+        
         for t in data['thresholds']:
             hours = t['hours']
             if hours < 1:
@@ -274,11 +283,25 @@ class VolatilityCog(commands.Cog):
             for coin in t['coins']:
                 percent_change = float(coin['percentChange'])
                 if abs(percent_change) >= alert_thresholds.get(tf, 999):
+                    alert_key = f"{coin['symbol']}_{tf}"
+                    
+                    # Check if we've sent this alert recently
+                    if alert_key in self.sent_alerts:
+                        prev_percent, prev_time = self.sent_alerts[alert_key]
+                        # Only resend if the change is significantly different (>2% difference)
+                        # or if it's been more than 1 hour
+                        time_diff = (current_time - prev_time).total_seconds()
+                        percent_diff = abs(abs(percent_change) - abs(prev_percent))
+                        
+                        if time_diff < 3600 and percent_diff < 2:
+                            continue  # Skip this alert
+                    
                     alerts.append({
                         'symbol': coin['symbol'],
                         'percent': percent_change,
                         'timeframe': tf,
-                        'price': float(coin['currentPrice'])
+                        'price': float(coin['currentPrice']),
+                        'key': alert_key
                     })
         
         if alerts:
@@ -304,6 +327,10 @@ class VolatilityCog(commands.Cog):
             embed.set_footer(text="Extreme price movements detected")
             
             await channel.send(embed=embed)
+            
+            # Track sent alerts
+            for alert in alerts[:5]:
+                self.sent_alerts[alert['key']] = (alert['percent'], current_time)
     
     @volatility_alerts.before_loop
     async def before_volatility_alerts(self):
