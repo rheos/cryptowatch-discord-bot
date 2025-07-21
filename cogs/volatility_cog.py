@@ -20,7 +20,7 @@ class VolatilityCog(commands.Cog):
         api_base = config.get('api_base_url', 'https://example.com/api')
         self.base_url = f"{api_base}/volatility-scanner"
         self.session = None
-        self.sent_alerts = {}  # Track alerts: {symbol_timeframe: (percent, timestamp)}
+        self.sent_alerts = {}  # Track alerts: {symbol: highest_timeframe_hours}
         self.volatility_alerts.start()
         
     def cog_unload(self):
@@ -267,10 +267,19 @@ class VolatilityCog(commands.Cog):
         alerts = []
         current_time = datetime.utcnow()
         
-        # Clean up old alerts (older than 2 hours)
+        # Clean up old alerts (older than 24 hours)
+        # Remove symbols that haven't had alerts in 24 hours
+        cutoff_time = current_time.timestamp() - 86400
         self.sent_alerts = {
             k: v for k, v in self.sent_alerts.items() 
-            if (current_time - v[1]).total_seconds() < 7200
+            if v['timestamp'] > cutoff_time
+        }
+        
+        # Map timeframe to hours for comparison
+        timeframe_to_hours = {
+            '15m': 0.25,
+            '1h': 1,
+            '4h': 4
         }
         
         for t in data['thresholds']:
@@ -283,25 +292,25 @@ class VolatilityCog(commands.Cog):
             for coin in t['coins']:
                 percent_change = float(coin['percentChange'])
                 if abs(percent_change) >= alert_thresholds.get(tf, 999):
-                    alert_key = f"{coin['symbol']}_{tf}"
+                    symbol = coin['symbol']
                     
-                    # Check if we've sent this alert recently
-                    if alert_key in self.sent_alerts:
-                        prev_percent, prev_time = self.sent_alerts[alert_key]
-                        # Only resend if the change is significantly different (>2% difference)
-                        # or if it's been more than 1 hour
-                        time_diff = (current_time - prev_time).total_seconds()
-                        percent_diff = abs(abs(percent_change) - abs(prev_percent))
+                    # Check if we've already alerted for this symbol
+                    if symbol in self.sent_alerts:
+                        # Get the highest timeframe we've alerted for
+                        prev_timeframe_hours = self.sent_alerts[symbol]['timeframe_hours']
+                        current_timeframe_hours = timeframe_to_hours.get(tf, hours)
                         
-                        if time_diff < 3600 and percent_diff < 2:
-                            continue  # Skip this alert
+                        # Only alert if this is a longer timeframe (higher hours)
+                        if current_timeframe_hours <= prev_timeframe_hours:
+                            logger.debug(f"Skipping {symbol} {tf} alert - already alerted for {prev_timeframe_hours}h timeframe")
+                            continue
                     
                     alerts.append({
-                        'symbol': coin['symbol'],
+                        'symbol': symbol,
                         'percent': percent_change,
                         'timeframe': tf,
-                        'price': float(coin['currentPrice']),
-                        'key': alert_key
+                        'timeframe_hours': timeframe_to_hours.get(tf, hours),
+                        'price': float(coin['currentPrice'])
                     })
         
         if alerts:
@@ -328,9 +337,14 @@ class VolatilityCog(commands.Cog):
             
             await channel.send(embed=embed)
             
-            # Track sent alerts
+            # Track sent alerts - update to the longest timeframe
             for alert in alerts[:5]:
-                self.sent_alerts[alert['key']] = (alert['percent'], current_time)
+                symbol = alert['symbol']
+                if symbol not in self.sent_alerts or alert['timeframe_hours'] > self.sent_alerts[symbol]['timeframe_hours']:
+                    self.sent_alerts[symbol] = {
+                        'timeframe_hours': alert['timeframe_hours'],
+                        'timestamp': current_time.timestamp()
+                    }
     
     @volatility_alerts.before_loop
     async def before_volatility_alerts(self):
