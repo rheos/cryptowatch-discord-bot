@@ -4,7 +4,7 @@ Auto Updates Cog - Posts scheduled crypto updates to specified channels
 import discord
 from discord.ext import commands, tasks
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger('discord-bot.auto-updates')
@@ -25,6 +25,9 @@ class AutoUpdatesCog(commands.Cog):
         self.last_funding_time = None  # Still track for logging
         self.last_alert_symbols = set()  # Track alerted symbols to avoid spam
         self.last_alert_time = None  # Track when we last sent alerts
+        
+        # Track funding flip alerts to prevent duplicates
+        self.recent_flip_alerts = {}  # {symbol: (change_value, alert_time)}
         
         # Start scheduled tasks if channels are configured
         if self.funding_channel_id:
@@ -223,9 +226,23 @@ class AutoUpdatesCog(commands.Cog):
                     
                     # Alert if high-change turnarounds (using changes.prev.change)
                     big_turns = []
+                    current_time = datetime.utcnow()
+                    
                     for r in turned:
                         prev_change = r.get('changes', {}).get('prev', {}).get('change', 0)
                         if float(prev_change) > 0.003:  # >0.3% swing
+                            symbol = r['instId']
+                            
+                            # Check if we've alerted this symbol recently
+                            if symbol in self.recent_flip_alerts:
+                                last_change, last_time = self.recent_flip_alerts[symbol]
+                                time_diff = (current_time - last_time).total_seconds()
+                                
+                                # Skip if same alert within 1 hour
+                                if time_diff < 3600 and abs(float(prev_change) - last_change) < 0.001:
+                                    logger.debug(f"Skipping duplicate flip alert for {symbol}")
+                                    continue
+                            
                             big_turns.append(r)
                     
                     if big_turns:
@@ -238,14 +255,24 @@ class AutoUpdatesCog(commands.Cog):
                         
                         for rate in big_turns[:3]:
                             symbol = rate['instId']
-                            change = float(rate.get('changes', {}).get('prev', {}).get('change', 0)) * 100
+                            change = float(rate.get('changes', {}).get('prev', {}).get('change', 0))
+                            change_pct = change * 100
                             embed.add_field(
                                 name=symbol,
-                                value=f"↗️ +{change:.3f}% swing",
+                                value=f"↗️ +{change_pct:.3f}% swing",
                                 inline=True
                             )
+                            # Update cache to prevent duplicate alerts
+                            self.recent_flip_alerts[symbol] = (change, current_time)
                         
                         await channel.send(embed=embed)
+                        
+                        # Clean up old alerts (older than 2 hours)
+                        cutoff_time = current_time - timedelta(hours=2)
+                        self.recent_flip_alerts = {
+                            sym: (chg, time) for sym, (chg, time) in self.recent_flip_alerts.items()
+                            if time > cutoff_time
+                        }
                         
         except Exception as e:
             logger.error(f"Error in extreme rates check: {e}")
