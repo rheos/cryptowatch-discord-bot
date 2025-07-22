@@ -57,7 +57,7 @@ class VolatilityCog(commands.Cog):
         Example: !volatility 1h 5
         """
         # Validate timeframe
-        valid_timeframes = ['15m', '1h', '2h', '3h', '4h', '6h', '12h', '24h', '48h']
+        valid_timeframes = ['5m', '15m', '30m', '45m', '1h', '2h', '3h', '4h', '6h', '12h', '24h', '48h']
         if timeframe not in valid_timeframes:
             await ctx.send(f"Invalid timeframe. Choose from: {', '.join(valid_timeframes)}")
             return
@@ -122,7 +122,10 @@ class VolatilityCog(commands.Cog):
         """
         # Default thresholds for each timeframe
         default_thresholds = {
+            '5m': 2,
             '15m': 3,
+            '30m': 4,
+            '45m': 4.5,
             '1h': 5,
             '2h': 7,
             '3h': 10,
@@ -193,7 +196,7 @@ class VolatilityCog(commands.Cog):
         symbol = symbol.upper()
         
         # Validate timeframe
-        valid_timeframes = ['15m', '1h', '2h', '3h', '4h', '6h', '12h', '24h', '48h']
+        valid_timeframes = ['5m', '15m', '30m', '45m', '1h', '2h', '3h', '4h', '6h', '12h', '24h', '48h']
         if timeframe not in valid_timeframes:
             await ctx.send(f"Invalid timeframe. Choose from: {', '.join(valid_timeframes)}")
             return
@@ -246,11 +249,13 @@ class VolatilityCog(commands.Cog):
         if not self.config.get('auto_update_channels', {}).get('alerts'):
             return
             
-        # Define alert thresholds
+        # Define alert thresholds - matching web app defaults
         alert_thresholds = {
-            '15m': 10,   # 10% in 15 minutes is extreme
-            '1h': 15,     # 15% in 1 hour
-            '4h': 25,     # 25% in 4 hours
+            '5m': 2,      # 2% in 5 minutes - catch early moves
+            '15m': 3,     # 3% in 15 minutes
+            '1h': 5,      # 5% in 1 hour
+            '2h': 7,      # 7% in 2 hours
+            '4h': 12,     # 12% in 4 hours
         }
         
         data = await self.fetch_volatility_data(alert_thresholds)
@@ -277,8 +282,10 @@ class VolatilityCog(commands.Cog):
         
         # Map timeframe to hours for comparison
         timeframe_to_hours = {
+            '5m': 0.0833,
             '15m': 0.25,
             '1h': 1,
+            '2h': 2,
             '4h': 4
         }
         
@@ -318,8 +325,8 @@ class VolatilityCog(commands.Cog):
             alerts.sort(key=lambda x: abs(x['percent']), reverse=True)
             
             embed = discord.Embed(
-                title="⚠️ Extreme Volatility Alert",
-                description="Significant price movements detected!",
+                title="🚨 Volatility Alert",
+                description="Notable price movements detected!",
                 color=discord.Color.orange(),
                 timestamp=datetime.utcnow()
             )
@@ -333,7 +340,7 @@ class VolatilityCog(commands.Cog):
                     inline=True
                 )
             
-            embed.set_footer(text="Extreme price movements detected")
+            embed.set_footer(text="Price movements exceeding configured thresholds")
             
             await channel.send(embed=embed)
             

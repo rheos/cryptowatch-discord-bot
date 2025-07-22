@@ -20,8 +20,9 @@ class AutoUpdatesCog(commands.Cog):
         self.funding_channel_id = config.get("auto_update_channels", {}).get("funding")
         self.alerts_channel_id = config.get("auto_update_channels", {}).get("alerts")
         
-        # Track last funding update times
-        self.last_funding_time = None
+        # Track last rates snapshot to detect changes
+        self.last_rates_snapshot = {}  # {symbol: rate} to detect rate changes
+        self.last_funding_time = None  # Still track for logging
         self.last_alert_symbols = set()  # Track alerted symbols to avoid spam
         self.last_alert_time = None  # Track when we last sent alerts
         
@@ -40,12 +41,12 @@ class AutoUpdatesCog(commands.Cog):
         if self.session:
             await self.session.close()
     
-    @tasks.loop(minutes=15)  # Check every 15 minutes for new data (funding updates every 8 hours)
+    @tasks.loop(minutes=5)  # Check every 5 minutes for rate changes
     async def update_funding_summary(self):
-        """Check for new funding data and post summary if updated
+        """Check for funding rate changes and post summary if updated
         
-        Note: BloFin funding rates typically update every 8 hours (00:00, 08:00, 16:00 UTC)
-        but different coins may update at different times, so we check frequently.
+        Note: Funding rates can change dynamically throughout the day,
+        not just at the 8-hour settlement times.
         """
         channel = self.bot.get_channel(self.funding_channel_id)
         if not channel:
@@ -57,21 +58,40 @@ class AutoUpdatesCog(commands.Cog):
                     data = await response.json()
                     rates = data.get('rates', [])
                     
-                    # Check if we have new funding data
+                    # Check if we have rate changes (not just funding time changes)
+                    current_snapshot = {}
+                    has_changes = False
+                    
+                    for rate in rates:
+                        symbol = rate['instId']
+                        current_rate = float(rate['currentRate'])
+                        current_snapshot[symbol] = current_rate
+                        
+                        # Check if this rate has changed
+                        if symbol in self.last_rates_snapshot:
+                            last_rate = self.last_rates_snapshot[symbol]
+                            if abs(current_rate - last_rate) > 0.00000001:  # Small epsilon for float comparison
+                                has_changes = True
+                                logger.debug(f"{symbol}: rate changed from {last_rate:.6f} to {current_rate:.6f}")
+                        else:
+                            # New symbol we haven't seen before
+                            has_changes = True
+                    
+                    # If no changes detected, skip update
+                    if self.last_rates_snapshot and not has_changes:
+                        logger.debug("No rate changes detected")
+                        return
+                    
+                    # Update our snapshot
+                    self.last_rates_snapshot = current_snapshot
+                    
+                    # Track funding time for logging
                     if rates:
-                        # Get the latest funding time from the data
                         latest_funding_time = max(
                             rate.get('fundingTime', 0) for rate in rates if rate.get('fundingTime')
                         )
-                        
-                        # Skip if we've already posted this funding update
-                        if self.last_funding_time and latest_funding_time <= self.last_funding_time:
-                            logger.debug(f"Checked for updates - no new funding data since {datetime.fromtimestamp(self.last_funding_time/1000)} UTC")
-                            return
-                        
-                        logger.info(f"New funding data available! Last: {datetime.fromtimestamp(self.last_funding_time/1000) if self.last_funding_time else 'Never'}, Current: {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
-                        
                         self.last_funding_time = latest_funding_time
+                        logger.info(f"Rate changes detected! Funding time: {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
                     
                     rates = rates[:20]
                     
@@ -82,25 +102,41 @@ class AutoUpdatesCog(commands.Cog):
                         timestamp=datetime.utcnow()
                     )
                     
-                    # Split into negative and improving
+                    # Split into categories
                     very_negative = [r for r in rates if float(r['currentRate']) < -0.001]  # < -0.1%
-                    moderate = [r for r in rates if -0.001 <= float(r['currentRate']) < -0.0005]
                     
                     if very_negative:
-                        symbols = [r['instId'].replace('-USDT', '') for r in very_negative[:8]]
+                        symbols = [r['instId'] for r in very_negative[:8]]
                         embed.add_field(
                             name="🔴 Extreme Negative (< -0.1%)",
                             value=", ".join(symbols),
                             inline=False
                         )
                     
-                    if moderate:
-                        symbols = [r['instId'].replace('-USDT', '') for r in moderate[:8]]
-                        embed.add_field(
-                            name="🟡 Moderate Negative",
-                            value=", ".join(symbols),
-                            inline=False
-                        )
+                    # Get worsening and improving rates
+                    async with self.session.get(f"{self.api_base}/worsening-negative") as resp_worse:
+                        if resp_worse.status == 200:
+                            worse_data = await resp_worse.json()
+                            worsening = worse_data.get('rates', [])[:8]
+                            if worsening:
+                                symbols = [r['instId'] for r in worsening]
+                                embed.add_field(
+                                    name="📉 Worsening Negative",
+                                    value=", ".join(symbols),
+                                    inline=False
+                                )
+                    
+                    async with self.session.get(f"{self.api_base}/improving-negative") as resp_improve:
+                        if resp_improve.status == 200:
+                            improve_data = await resp_improve.json()
+                            improving = improve_data.get('rates', [])[:8]
+                            if improving:
+                                symbols = [r['instId'] for r in improving]
+                                embed.add_field(
+                                    name="📈 Improving Negative",
+                                    value=", ".join(symbols),
+                                    inline=False
+                                )
                     
                     # Check for any that turned positive
                     async with self.session.get(f"{self.api_base}/turned-positive") as resp2:
@@ -108,7 +144,7 @@ class AutoUpdatesCog(commands.Cog):
                             turned_data = await resp2.json()
                             turned = turned_data.get('rates', [])[:5]
                             if turned:
-                                symbols = [r['instId'].replace('-USDT', '') for r in turned]
+                                symbols = [r['instId'] for r in turned]
                                 embed.add_field(
                                     name="🟢 Recently Turned Positive",
                                     value=", ".join(symbols),
@@ -122,7 +158,7 @@ class AutoUpdatesCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error in funding summary update: {e}")
     
-    @tasks.loop(minutes=15)  # Check every 15 minutes for new data
+    @tasks.loop(minutes=5)  # Check every 5 minutes for rate changes
     async def check_extreme_rates(self):
         """Check for extreme funding rates and alert if new"""
         channel = self.bot.get_channel(self.alerts_channel_id)
@@ -136,16 +172,8 @@ class AutoUpdatesCog(commands.Cog):
                     data = await response.json()
                     rates = data.get('rates', [])
                     
-                    # Check if we have new funding data
-                    if rates:
-                        latest_funding_time = max(
-                            rate.get('fundingTime', 0) for rate in rates if rate.get('fundingTime')
-                        )
-                        
-                        # Skip if this is old data we've already seen
-                        if self.last_funding_time and latest_funding_time <= self.last_funding_time:
-                            logger.debug(f"No new extreme rate data since {datetime.fromtimestamp(self.last_funding_time/1000)} UTC")
-                            return
+                    # Note: We don't check funding time here because rates can change
+                    # dynamically. Instead we track which symbols we've alerted on below.
                     
                     # Alert if any coin has funding < -0.2%
                     extreme = [r for r in rates if float(r['currentRate']) < -0.002]
@@ -159,7 +187,7 @@ class AutoUpdatesCog(commands.Cog):
                         )
                         
                         for rate in extreme[:5]:
-                            symbol = rate['instId'].replace('-USDT', '')
+                            symbol = rate['instId']
                             funding = float(rate['currentRate']) * 100
                             embed.add_field(
                                 name=symbol,
@@ -183,7 +211,7 @@ class AutoUpdatesCog(commands.Cog):
                             # Update tracked symbols
                             self.last_alert_symbols = extreme_symbols
                             self.last_alert_time = now
-                            logger.info(f"Sent extreme funding alert for: {', '.join(s.replace('-USDT', '') for s in extreme_symbols)}")
+                            logger.info(f"Sent extreme funding alert for: {', '.join(extreme_symbols)}")
                         else:
                             logger.debug("Skipping extreme alert - no new symbols")
             
@@ -209,7 +237,7 @@ class AutoUpdatesCog(commands.Cog):
                         )
                         
                         for rate in big_turns[:3]:
-                            symbol = rate['instId'].replace('-USDT', '')
+                            symbol = rate['instId']
                             change = float(rate.get('changes', {}).get('prev', {}).get('change', 0)) * 100
                             embed.add_field(
                                 name=symbol,
