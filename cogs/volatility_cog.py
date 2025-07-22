@@ -321,7 +321,27 @@ class VolatilityCog(commands.Cog):
                     })
         
         if alerts:
-            # Sort by absolute percentage
+            # Deduplicate alerts - keep only the most significant alert for each symbol
+            # Most significant = highest absolute percentage change OR longest timeframe if percentages are similar
+            deduped_alerts = {}
+            for alert in alerts:
+                symbol = alert['symbol']
+                if symbol not in deduped_alerts:
+                    deduped_alerts[symbol] = alert
+                else:
+                    # Keep the alert with higher absolute percentage
+                    # If percentages are close (within 1%), prefer longer timeframe
+                    current_abs = abs(deduped_alerts[symbol]['percent'])
+                    new_abs = abs(alert['percent'])
+                    
+                    if new_abs > current_abs + 1.0:  # New alert is significantly higher
+                        deduped_alerts[symbol] = alert
+                    elif abs(new_abs - current_abs) <= 1.0 and alert['timeframe_hours'] > deduped_alerts[symbol]['timeframe_hours']:
+                        # Similar percentages, prefer longer timeframe
+                        deduped_alerts[symbol] = alert
+            
+            # Convert back to list and sort by absolute percentage
+            alerts = list(deduped_alerts.values())
             alerts.sort(key=lambda x: abs(x['percent']), reverse=True)
             
             embed = discord.Embed(
