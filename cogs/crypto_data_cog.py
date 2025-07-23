@@ -345,6 +345,25 @@ class CryptoDataCog(commands.Cog):
             inline=False
         )
         
+        # Engagement commands
+        engagement_commands = [
+            ("!mystats", None, "📈 Check your engagement level & tier"),
+            ("!vacation", None, "🏖️ Request vacation mode (Active members only)")
+        ]
+        
+        engagement_text = ""
+        for cmd, alias, desc in engagement_commands:
+            engagement_text += f"**{cmd}**"
+            if alias:
+                engagement_text += f" or **{alias}**"
+            engagement_text += f"\n{desc}\n\n"
+        
+        embed.add_field(
+            name="👥 Engagement System",
+            value=engagement_text.strip(),
+            inline=False
+        )
+        
         embed.add_field(
             name="ℹ️ Notes",
             value=(
