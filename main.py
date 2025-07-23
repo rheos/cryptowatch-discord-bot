@@ -24,24 +24,10 @@ def setup_logging():
     # Ensure logs directory exists
     os.makedirs('logs', exist_ok=True)
     
-    # Main bot logger
-    logger = logging.getLogger('discord-bot')
-    logger.setLevel(logging.INFO)
-    
-    # Main bot log file
-    handler = RotatingFileHandler(
-        'logs/bot.log',
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    logger.addHandler(handler)
-    
-    # Console handler for immediate feedback
+    # Console handler for immediate feedback (startup/shutdown messages)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    logger.addHandler(console_handler)
     
     # Set up separate loggers for each cog with their own files
     cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement']
@@ -57,9 +43,6 @@ def setup_logging():
         )
         cog_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         cog_logger.addHandler(cog_handler)
-        
-        # Also add to main console
-        cog_logger.addHandler(console_handler)
     
     # Error-only log file
     error_handler = RotatingFileHandler(
@@ -75,7 +58,12 @@ def setup_logging():
     discord_logger = logging.getLogger('discord')
     discord_logger.setLevel(logging.WARNING)
     
-    return logger
+    # Create a simple logger for startup/shutdown messages
+    startup_logger = logging.getLogger('startup')
+    startup_logger.setLevel(logging.INFO)
+    startup_logger.addHandler(console_handler)
+    
+    return startup_logger
 
 # Load configuration
 def load_config():
@@ -99,7 +87,7 @@ class CryptoWatchBot(commands.Bot):
         )
         
         self.config = config
-        self.logger = logging.getLogger('discord-bot')
+        self.logger = logging.getLogger('startup')
     
     async def setup_hook(self):
         """Load all cogs during setup"""

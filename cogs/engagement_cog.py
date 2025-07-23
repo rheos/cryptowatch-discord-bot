@@ -44,6 +44,18 @@ class EngagementCog(commands.Cog):
         self.dm_warnings_enabled = warnings_config.get('dm_enabled', True)
         self.min_messages_warning = warnings_config.get('min_messages_warning', 7)
         
+        # Parse start date for warnings
+        start_after_str = warnings_config.get('start_after', None)
+        if start_after_str:
+            try:
+                self.warnings_start_date = datetime.strptime(start_after_str, '%Y-%m-%d')
+                self.logger.info(f"Warnings will start after {start_after_str}")
+            except ValueError:
+                self.warnings_start_date = None
+                self.logger.error(f"Invalid start_after date format: {start_after_str}")
+        else:
+            self.warnings_start_date = None
+        
         # Cache for member activity
         self.member_activity = defaultdict(lambda: {"messages": 0, "last_active": None})
         
@@ -153,6 +165,12 @@ class EngagementCog(commands.Cog):
     async def check_warning_needed(self, guild, member, activity):
         """Check if member needs a warning about losing Active status"""
         try:
+            # Check if warnings should start yet
+            if self.warnings_start_date:
+                if datetime.utcnow() < self.warnings_start_date:
+                    self.logger.debug(f"Skipping warning for {member.name} - warnings start after {self.warnings_start_date.date()}")
+                    return
+            
             # Check if they're below threshold
             if activity["messages"] < self.ACTIVE_MESSAGES_THRESHOLD:
                 # Check if they would qualify with messages from next X days
