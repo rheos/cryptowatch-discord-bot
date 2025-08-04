@@ -154,13 +154,24 @@ class AIChatCog(commands.Cog):
         # Convert to uppercase for matching
         message_upper = message.upper()
         
+        # Common words to exclude
+        exclude_words = {'THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 
+                        'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 
+                        'HIT', 'LET', 'TOO', 'USE', 'WHAT', 'WHEN', 'THAT', 'THIS', 'BEEN', 'FROM', 'HAVE', 'DOES', 
+                        'CURRENT', 'PRICE', 'WORTH', 'COST', 'CHECK', 'CAN', 'WITH', 'WILL', 'INTO', 'THAN', 'THEY', 'SOME'}
+        
+        # Look for patterns, prioritizing longer symbols
+        matches = []
         for pattern in patterns:
-            match = re.search(pattern, message_upper)
-            if match:
+            for match in re.finditer(pattern, message_upper):
                 symbol = match.group(1)
-                # Filter out common English words that might match
-                if symbol not in ['THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'HIT', 'LET', 'TOO', 'USE']:
-                    return symbol
+                if symbol not in exclude_words and len(symbol) >= 2:
+                    matches.append((match.start(), symbol))
+        
+        # Sort by position and return the first valid symbol
+        if matches:
+            matches.sort(key=lambda x: x[0])
+            return matches[0][1]
         
         # Common name mappings (case insensitive)
         name_to_symbol = {
@@ -223,13 +234,14 @@ class AIChatCog(commands.Cog):
             price_patterns = [
                 r'PRICE OF ([A-Z0-9]{2,10})',
                 r'PRICE OF \$([A-Z0-9]{2,10})',
-                r'\b([A-Z0-9]{2,10}) PRICE',
+                r'PRICE FOR ([A-Z0-9]{2,10})',
                 r'\$([A-Z0-9]{2,10})',
                 r'\b([A-Z0-9]{2,10})/USDT',
                 r'HOW IS ([A-Z0-9]{2,10})',
                 r'CHECK ([A-Z0-9]{2,10})',
                 r'WORTH OF ([A-Z0-9]{2,10})',
                 r'COST OF ([A-Z0-9]{2,10})',
+                r'([A-Z0-9]{2,10}) \?',  # Matches "BTC ?"
             ]
             
             question_upper = question.upper()
@@ -239,7 +251,7 @@ class AIChatCog(commands.Cog):
                 if match:
                     potential_symbol = match.group(1)
                     logger.debug(f"Pattern '{pattern}' matched: {potential_symbol}")
-                    if potential_symbol not in ['THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'HIT', 'LET', 'TOO', 'USE', 'WHAT', 'WHEN', 'THAT', 'THIS', 'BEEN', 'FROM', 'HAVE', 'DOES', 'CURRENT', 'PRICE']:
+                    if potential_symbol not in ['THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'HIT', 'LET', 'TOO', 'USE', 'WHAT', 'WHEN', 'THAT', 'THIS', 'BEEN', 'FROM', 'HAVE', 'DOES', 'CURRENT', 'PRICE', 'WORTH', 'COST', 'CHECK'] and len(potential_symbol) >= 2:
                         symbol = potential_symbol
                         logger.debug(f"Selected symbol: {symbol}")
                         break
