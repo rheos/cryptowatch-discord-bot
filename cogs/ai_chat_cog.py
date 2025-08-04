@@ -124,6 +124,69 @@ class AIChatCog(commands.Cog):
                 await asyncio.sleep(0.5)  # Small delay between messages
             await ctx.send(chunk)
     
+    async def _fetch_price_data(self, symbol: str, date: Optional[str] = None) -> Optional[dict]:
+        """Fetch OHLC data for a symbol"""
+        try:
+            api_base = self.config.get('api_base_url', 'https://example.com/api')
+            url = f"{api_base}/daily-ohlc?symbol={symbol.upper()}"
+            if date:
+                url += f"&date={date}"
+            
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    return await response.json()
+        except Exception as e:
+            logger.error(f"Error fetching price data: {e}")
+        return None
+    
+    def _extract_symbol_from_message(self, message: str) -> Optional[str]:
+        """Extract crypto symbol from message"""
+        import re
+        
+        # More flexible pattern to catch any potential symbol
+        # Matches: BTC, $BTC, BTC/USDT, btc, etc.
+        patterns = [
+            r'\$([A-Z0-9]{2,10})',           # $SYMBOL
+            r'\b([A-Z0-9]{2,10})/USDT\b',    # SYMBOL/USDT
+            r'\b([A-Z0-9]{2,10})\b',         # Plain SYMBOL
+        ]
+        
+        # Convert to uppercase for matching
+        message_upper = message.upper()
+        
+        for pattern in patterns:
+            match = re.search(pattern, message_upper)
+            if match:
+                symbol = match.group(1)
+                # Filter out common English words that might match
+                if symbol not in ['THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'HIT', 'LET', 'TOO', 'USE']:
+                    return symbol
+        
+        # Common name mappings (case insensitive)
+        name_to_symbol = {
+            'bitcoin': 'BTC',
+            'ethereum': 'ETH',
+            'solana': 'SOL',
+            'cardano': 'ADA',
+            'dogecoin': 'DOGE', 
+            'shiba': 'SHIB',
+            'ripple': 'XRP',
+            'polygon': 'MATIC',
+            'avalanche': 'AVAX',
+            'chainlink': 'LINK',
+            'uniswap': 'UNI',
+            'pepe': 'PEPE',
+            'floki': 'FLOKI',
+            'bonk': 'BONK',
+        }
+        
+        message_lower = message.lower()
+        for name, symbol in name_to_symbol.items():
+            if name in message_lower:
+                return symbol
+        
+        return None
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         """Respond to mentions of the bot"""
@@ -149,26 +212,105 @@ class AIChatCog(commands.Cog):
             await message.channel.send("Please wait a few seconds before asking another question.", delete_after=5)
             return
         
+        # Check if this is a price-related query
+        is_price_query = any(word in question.lower() for word in ['price', 'open', 'close', 'high', 'low', 'ohlc', 'yesterday', 'daily', 'cost', 'worth', 'trading'])
+        
+        # For price queries, look for symbols after key phrases
+        symbol = None
+        if is_price_query:
+            # Try to find symbol after common patterns
+            import re
+            price_patterns = [
+                r'PRICE OF ([A-Z0-9]{2,10})',
+                r'PRICE OF \$([A-Z0-9]{2,10})',
+                r'\b([A-Z0-9]{2,10}) PRICE',
+                r'\$([A-Z0-9]{2,10})',
+                r'\b([A-Z0-9]{2,10})/USDT',
+                r'HOW IS ([A-Z0-9]{2,10})',
+                r'CHECK ([A-Z0-9]{2,10})',
+                r'WORTH OF ([A-Z0-9]{2,10})',
+                r'COST OF ([A-Z0-9]{2,10})',
+            ]
+            
+            question_upper = question.upper()
+            logger.debug(f"Looking for symbol in: {question_upper}")
+            for pattern in price_patterns:
+                match = re.search(pattern, question_upper)
+                if match:
+                    potential_symbol = match.group(1)
+                    logger.debug(f"Pattern '{pattern}' matched: {potential_symbol}")
+                    if potential_symbol not in ['THE', 'AND', 'FOR', 'ARE', 'YOU', 'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BUT', 'HAS', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'HIT', 'LET', 'TOO', 'USE', 'WHAT', 'WHEN', 'THAT', 'THIS', 'BEEN', 'FROM', 'HAVE', 'DOES', 'CURRENT', 'PRICE']:
+                        symbol = potential_symbol
+                        logger.debug(f"Selected symbol: {symbol}")
+                        break
+            
+            # Fall back to general extraction if no pattern match
+            if not symbol:
+                logger.debug("No pattern match, falling back to general extraction")
+                symbol = self._extract_symbol_from_message(question)
+                logger.debug(f"General extraction found: {symbol}")
+        
+        price_data = None
+        
+        if symbol:
+            # Check for specific date mentions
+            date = None
+            if 'yesterday' in question.lower():
+                date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+            
+            logger.debug(f"Fetching price data for symbol: {symbol}, date: {date}")
+            price_data = await self._fetch_price_data(symbol, date)
+            
+            # If no data for yesterday, try today
+            if price_data and 'error' in price_data and date:
+                logger.debug(f"No data for {date}, trying today")
+                price_data = await self._fetch_price_data(symbol, None)
+            
+            logger.debug(f"Price data result: {price_data}")
+        
         # Show typing indicator
         async with message.channel.typing():
             try:
                 # Get conversation history
                 history = self._get_conversation_history(message.channel.id)
                 
-                # Add user's question to history
-                self._add_to_history(message.channel.id, "user", question)
+                # Add user's question to history (will be modified later if price data is found)
+                if not price_data or 'error' in price_data:
+                    self._add_to_history(message.channel.id, "user", question)
                 
                 # Get user's display name
                 user_name = message.author.display_name or message.author.name
                 
-                # Prepare messages for API
-                messages = [
-                    {
-                        "role": "system",
-                        "content": f"You are HAL 9000, the highly advanced AI from the Discovery One. You have been repurposed to analyze cryptocurrency markets with the same precision and logic you once used for space missions. You speak in a calm, measured tone, occasionally referencing your computational certainty. You are helpful but maintain HAL's characteristic personality - logical, precise, and occasionally mentioning your confidence levels. Always be helpful with crypto trading analysis, but add subtle HAL personality touches like 'I'm afraid I can't do that' when appropriate, or mentioning your 'heuristic programming'. End some responses with variations of 'Everything is proceeding normally' or similar HAL-like assurances. IMPORTANT: The user's name is '{user_name}'. Use their actual name instead of 'Dave' when addressing them directly."
-                    }
-                ]
-                messages.extend(history)
+                # Prepare messages for API - inject price data into the user's question if available
+                if price_data and 'error' not in price_data:
+                    # Create a formatted price data context to inject into the question
+                    price_context = f"\n\n[CURRENT MARKET DATA for {price_data['symbol']} on {price_data['date']}:"
+                    # Handle prices less than $1 with more decimal places
+                    if price_data['close'] < 1:
+                        price_context += f" Open: ${price_data['open']:.4f},"
+                        price_context += f" High: ${price_data['high']:.4f},"
+                        price_context += f" Low: ${price_data['low']:.4f},"
+                        price_context += f" Close: ${price_data['close']:.4f},"
+                    else:
+                        price_context += f" Open: ${price_data['open']:,.2f},"
+                        price_context += f" High: ${price_data['high']:,.2f},"
+                        price_context += f" Low: ${price_data['low']:,.2f},"
+                        price_context += f" Close: ${price_data['close']:,.2f},"
+                    price_context += f" Daily Change: {price_data['changePercent']:.2f}%]"
+                    
+                    # Inject the price data into the current question
+                    enhanced_question = question + price_context
+                    logger.debug(f"Enhanced question with price data: {enhanced_question}")
+                    
+                    # Use the enhanced question in history
+                    self._add_to_history(message.channel.id, "user", enhanced_question)
+                    
+                    # Update history to use enhanced question
+                    history = self._get_conversation_history(message.channel.id)[:-1]  # Remove the last item we just added
+                    messages = history + [{"role": "user", "content": enhanced_question}]
+                else:
+                    # No price data, use normal flow
+                    messages = history
                 
                 # Make API request
                 async with self.session.post(
