@@ -18,6 +18,7 @@ from cogs.crypto_data_cog import CryptoDataCog
 from cogs.auto_updates_cog import AutoUpdatesCog
 from cogs.volatility_cog import VolatilityCog
 from cogs.engagement_cog import EngagementCog
+from cogs.ai_chat_cog import AIChatCog
 
 # Set up logging
 def setup_logging():
@@ -30,7 +31,7 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     
     # Set up separate loggers for each cog with their own files
-    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement']
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat']
     for cog_name in cog_loggers:
         cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
         cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging
@@ -98,6 +99,7 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(AutoUpdatesCog(self, self.config))
         await self.add_cog(VolatilityCog(self, self.config))
         await self.add_cog(EngagementCog(self, self.config))
+        await self.add_cog(AIChatCog(self, self.config))
         
         self.logger.info("All cogs loaded successfully")
     

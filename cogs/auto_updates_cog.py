@@ -44,7 +44,7 @@ class AutoUpdatesCog(commands.Cog):
         if self.session:
             await self.session.close()
     
-    @tasks.loop(minutes=5)  # Check every 5 minutes for rate changes
+    @tasks.loop(minutes=30)  # Check every 30 minutes for rate changes
     async def update_funding_summary(self):
         """Check for funding rate changes and post summary if updated
         
@@ -70,10 +70,10 @@ class AutoUpdatesCog(commands.Cog):
                         current_rate = float(rate['currentRate'])
                         current_snapshot[symbol] = current_rate
                         
-                        # Check if this rate has changed
+                        # Check if this rate has changed significantly (at least 0.01% change)
                         if symbol in self.last_rates_snapshot:
                             last_rate = self.last_rates_snapshot[symbol]
-                            if abs(current_rate - last_rate) > 0.00000001:  # Small epsilon for float comparison
+                            if abs(current_rate - last_rate) > 0.0001:  # 0.01% minimum change
                                 has_changes = True
                                 logger.debug(f"{symbol}: rate changed from {last_rate:.6f} to {current_rate:.6f}")
                         else:
@@ -161,7 +161,7 @@ class AutoUpdatesCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error in funding summary update: {e}")
     
-    @tasks.loop(minutes=5)  # Check every 5 minutes for rate changes
+    @tasks.loop(minutes=15)  # Check every 15 minutes for rate changes
     async def check_extreme_rates(self):
         """Check for extreme funding rates and alert if new"""
         channel = self.bot.get_channel(self.alerts_channel_id)
@@ -178,13 +178,13 @@ class AutoUpdatesCog(commands.Cog):
                     # Note: We don't check funding time here because rates can change
                     # dynamically. Instead we track which symbols we've alerted on below.
                     
-                    # Alert if any coin has funding < -0.2%
-                    extreme = [r for r in rates if float(r['currentRate']) < -0.002]
+                    # Alert if any coin has funding < -0.5%
+                    extreme = [r for r in rates if float(r['currentRate']) < -0.005]
                     
                     if extreme:
                         embed = discord.Embed(
                             title="⚠️ Extreme Funding Alert",
-                            description="Coins with funding rates below -0.2%",
+                            description="Coins with funding rates below -0.5%",
                             color=discord.Color.red(),
                             timestamp=datetime.utcnow()
                         )
@@ -230,7 +230,7 @@ class AutoUpdatesCog(commands.Cog):
                     
                     for r in turned:
                         prev_change = r.get('changes', {}).get('prev', {}).get('change', 0)
-                        if float(prev_change) > 0.003:  # >0.3% swing
+                        if float(prev_change) > 0.01:  # >1% swing
                             symbol = r['instId']
                             
                             # Check if we've alerted this symbol recently

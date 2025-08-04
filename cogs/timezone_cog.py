@@ -3,7 +3,7 @@ Timezone Cog - Handles timezone channel updates
 """
 import discord
 from discord.ext import commands, tasks
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 import asyncio
 import logging
@@ -24,9 +24,13 @@ class TimezoneCog(commands.Cog):
         """Format time for a specific timezone"""
         now = datetime.now(timezone(city_tz))
         
-        # Round down to last 5-minute interval
-        minute = now.minute - (now.minute % 5)
-        rounded_time = now.replace(minute=minute, second=0, microsecond=0)
+        # Round to nearest 5-minute interval
+        minute = round(now.minute / 5) * 5
+        if minute == 60:
+            # If rounding up to 60, we need to add an hour
+            rounded_time = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        else:
+            rounded_time = now.replace(minute=minute, second=0, microsecond=0)
         
         hour = rounded_time.strftime('%-I')
         minute_str = rounded_time.strftime('%M')
@@ -43,10 +47,19 @@ class TimezoneCog(commands.Cog):
         
         return f"{city_name} {hour}:{minute_str}{period}"
     
-    @tasks.loop(minutes=5)
+    @tasks.loop(seconds=60)  # Check every minute
     async def update_timezone_channels(self):
-        """Update timezone channel names every 5 minutes"""
+        """Update timezone channel names at 5-minute marks"""
         try:
+            # Only run at 5-minute marks
+            now = datetime.now()
+            if now.minute % 5 != 0:
+                return
+                
+            # Add a small delay to ensure we're past the exact minute mark
+            if now.second < 2:
+                await asyncio.sleep(2)
+            
             logger.info("Updating timezone channels...")
             updates_made = 0
             
