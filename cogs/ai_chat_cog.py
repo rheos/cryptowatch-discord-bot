@@ -20,9 +20,9 @@ class AIChatCog(commands.Cog):
         self.config = config
         self.session = None
         
-        # Get Convex site URL from config or construct it
-        convex_url = config.get('convex_url', 'https://qualified-otter-813.convex.cloud')
-        self.chat_endpoint = convex_url.replace('.cloud', '.site') + '/api/chat'
+        # Get API base URL from config
+        api_base = config.get('api_base_url', 'https://example.com/api')
+        self.chat_endpoint = f"{api_base}/chat"
         
         # Store conversation history per channel (with TTL)
         self.conversations: Dict[int, List[dict]] = {}
