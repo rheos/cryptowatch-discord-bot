@@ -21,6 +21,14 @@ start_bot() {
         fi
     fi
     
+    # Source environment variables if .env exists
+    if [ -f "$SCRIPT_DIR/.env" ]; then
+        source "$SCRIPT_DIR/.env"
+        echo "Loaded environment from .env (CONFIG_FILE=$CONFIG_FILE)"
+    else
+        echo "Warning: No .env file found. Using defaults."
+    fi
+    
     echo "Starting Discord bot..."
     cd "$SCRIPT_DIR"
     nohup python3 main.py >> "$BOT_LOG_FILE" 2>&1 &

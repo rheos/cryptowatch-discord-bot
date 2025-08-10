@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from collections import defaultdict
 import asyncio
+import aiomysql
 
 class EngagementCog(commands.Cog):
     def __init__(self, bot, config=None):
@@ -144,19 +145,16 @@ class EngagementCog(commands.Cog):
     async def get_member_activity(self, guild, member):
         """Get member activity in the last X days"""
         try:
-            messages = 0
-            cutoff_date = datetime.utcnow() - timedelta(days=self.ACTIVE_DAYS_THRESHOLD)
+            # Get activity from database
+            stats = await self.bot.db.get_member_stats(guild.id, member.id, self.ACTIVE_DAYS_THRESHOLD)
             
-            # Check recent messages in all channels
-            for channel in guild.text_channels:
-                try:
-                    async for message in channel.history(after=cutoff_date, limit=None):
-                        if message.author == member and not message.content.startswith('!'):
-                            messages += 1
-                except discord.Forbidden:
-                    continue
-            
-            return {"messages": messages, "last_active": datetime.utcnow()}
+            if stats:
+                return {
+                    "messages": stats['total_messages'] or 0,
+                    "last_active": stats['last_active_date']
+                }
+            else:
+                return {"messages": 0, "last_active": None}
             
         except Exception as e:
             self.logger.error(f"Error getting activity for {member.name}: {e}")
@@ -270,6 +268,12 @@ class EngagementCog(commands.Cog):
             member = message.author
             guild = message.guild
             
+            # Track message in database
+            try:
+                await self.bot.db.track_message(guild.id, member.id)
+            except Exception as e:
+                self.logger.error(f"Error tracking message: {e}")
+            
             newmember_role = discord.utils.get(guild.roles, name=self.NEWMEMBER_ROLE)
             member_role = discord.utils.get(guild.roles, name=self.MEMBER_ROLE)
             
@@ -299,36 +303,46 @@ class EngagementCog(commands.Cog):
             # Analyze each member
             embed = discord.Embed(
                 title="Member Activity Analysis",
-                description="Analyzing member activity...",
+                description="Analyzing community activity...",
                 color=discord.Color.blue()
             )
             status_msg = await ctx.send(embed=embed)
             
-            for member in guild.members:
-                if member.bot:
-                    continue
-                
-                # Count messages in different time periods
-                for days, counter in [(7, 'active_7d'), (30, 'active_30d'), (90, 'active_90d')]:
-                    cutoff = datetime.utcnow() - timedelta(days=days)
-                    msg_count = 0
-                    
-                    for channel in guild.text_channels:
-                        try:
-                            async for message in channel.history(after=cutoff, limit=None):
-                                if message.author == member and not message.content.startswith('!'):
-                                    msg_count += 1
-                        except discord.Forbidden:
-                            continue
-                    
-                    if msg_count > 0:
+            # Get activity data from database
+            async with self.bot.db.pool.acquire() as conn:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    # Get activity for different time periods
+                    for days in [7, 30, 90]:
+                        await cursor.execute("""
+                            SELECT COUNT(DISTINCT user_id) as active_users
+                            FROM member_activity
+                            WHERE guild_id = %s 
+                            AND date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                            AND message_count > 0
+                        """, (guild.id, days))
+                        result = await cursor.fetchone()
+                        
                         if days == 7:
-                            active_7d += 1
+                            active_7d = result['active_users']
                         elif days == 30:
-                            active_30d += 1
-                            message_counts[member.id] = msg_count
+                            active_30d = result['active_users']
                         elif days == 90:
-                            active_90d += 1
+                            active_90d = result['active_users']
+                    
+                    # Get top active members
+                    await cursor.execute("""
+                        SELECT 
+                            user_id,
+                            SUM(message_count) as total_messages,
+                            COUNT(DISTINCT date) as active_days
+                        FROM member_activity
+                        WHERE guild_id = %s
+                        AND date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+                        GROUP BY user_id
+                        ORDER BY total_messages DESC
+                        LIMIT 10
+                    """, (guild.id,))
+                    top_members = await cursor.fetchall()
             
             # Prepare results
             embed = discord.Embed(
@@ -350,31 +364,26 @@ class EngagementCog(commands.Cog):
                 inline=True
             )
             
-            # Message distribution
-            msg_buckets = {"0": 0, "1-5": 0, "6-10": 0, "11-20": 0, "21+": 0}
-            for count in message_counts.values():
-                if count == 0:
-                    msg_buckets["0"] += 1
-                elif count <= 5:
-                    msg_buckets["1-5"] += 1
-                elif count <= 10:
-                    msg_buckets["6-10"] += 1
-                elif count <= 20:
-                    msg_buckets["11-20"] += 1
-                else:
-                    msg_buckets["21+"] += 1
+            # Top active members
+            if top_members:
+                top_list = []
+                for i, member_data in enumerate(top_members[:5], 1):
+                    member = guild.get_member(member_data['user_id'])
+                    if member:
+                        top_list.append(
+                            f"{i}. {member.mention}: {member_data['total_messages']} msgs "
+                            f"({member_data['active_days']} days)"
+                        )
+                
+                if top_list:
+                    embed.add_field(
+                        name="Top Active Members (30 days)",
+                        value="\n".join(top_list),
+                        inline=False
+                    )
             
-            embed.add_field(
-                name="30-Day Message Distribution",
-                value="\n".join([f"{k} messages: {v} members" for k, v in msg_buckets.items()]),
-                inline=True
-            )
-            
-            embed.add_field(
-                name="Recommended Grandfather Settings",
-                value=f"Days: 30\nMessages: 10\nWould grant Active to: {len([c for c in message_counts.values() if c >= 10])} members",
-                inline=False
-            )
+            # Add timestamp
+            embed.set_footer(text=f"As of {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
             
             await status_msg.edit(embed=embed)
             

@@ -11,6 +11,10 @@ import asyncio
 import os
 import sys
 
+# Import database
+from database import BotDatabase
+import json
+
 # Import cogs
 from cogs.timezone_cog import TimezoneCog
 from cogs.market_events_cog import MarketEventsCog
@@ -19,6 +23,7 @@ from cogs.auto_updates_cog import AutoUpdatesCog
 from cogs.volatility_cog import VolatilityCog
 from cogs.engagement_cog import EngagementCog
 from cogs.ai_chat_cog import AIChatCog
+from cogs.setup_cog import SetupCog
 
 # Set up logging
 def setup_logging():
@@ -66,10 +71,8 @@ def setup_logging():
     
     return startup_logger
 
-# Load configuration
-def load_config():
-    with open("config.json", "r") as f:
-        return json.load(f)
+# Import config loader
+from config_loader import load_config
 
 class CryptoWatchBot(commands.Bot):
     def __init__(self, config):
@@ -89,10 +92,17 @@ class CryptoWatchBot(commands.Bot):
         
         self.config = config
         self.logger = logging.getLogger('startup')
+        self.db = BotDatabase(config)
     
     async def setup_hook(self):
         """Load all cogs during setup"""
+        # Connect to database and run migrations
+        self.logger.info("Connecting to database...")
+        await self.db.connect()
+        self.logger.info("Database connected and migrations completed")
+        
         # Initialize cogs with config
+        await self.add_cog(SetupCog(self, self.config))  # Add setup cog first
         await self.add_cog(TimezoneCog(self, self.config))
         await self.add_cog(MarketEventsCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
@@ -108,6 +118,16 @@ class CryptoWatchBot(commands.Bot):
         self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         self.logger.info(f"Connected to {len(self.guilds)} guild(s)")
         
+        # Register all connected guilds
+        for guild in self.guilds:
+            await self.db.register_guild(guild.id, guild.name, guild.owner_id)
+            
+            # Check if this guild has channels configured
+            settings = await self.db.get_guild_settings(guild.id)
+            if not settings or not settings.get('channels'):
+                # Try to auto-configure from config file if this is the primary guild
+                await self._auto_configure_guild(guild)
+        
         # Set bot status
         await self.change_presence(
             activity=discord.Activity(
@@ -115,6 +135,93 @@ class CryptoWatchBot(commands.Bot):
                 name="crypto markets | !help"
             )
         )
+    
+    async def _auto_configure_guild(self, guild):
+        """Auto-configure guild channels from config file"""
+        # Only auto-configure if we have channel IDs in config
+        # This works for single-server bots where config has the actual IDs
+        try:
+            # Check if config has channel IDs (not just names)
+            if 'market_event_channel_id' in self.config:
+                self.logger.info(f"Auto-configuring channels for guild {guild.name} from config file")
+                
+                # Import channel configuration logic
+                from database import BotDatabase
+                async with self.db.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        # Configure timezone channels
+                        for tz_config in self.config.get('timezone_channels', []):
+                            channel = guild.get_channel(tz_config['channel_id'])
+                            if channel:
+                                await cursor.execute("""
+                                    INSERT INTO guild_channels (guild_id, channel_type, channel_id, settings)
+                                    VALUES (%s, %s, %s, %s)
+                                    ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)
+                                """, (
+                                    guild.id,
+                                    f"timezone_{tz_config['timezone'].replace('/', '_')}",
+                                    tz_config['channel_id'],
+                                    json.dumps({'timezone': tz_config['timezone']})
+                                ))
+                        
+                        # Configure other channels from config
+                        channel_mappings = [
+                            ('market_event_channel_id', 'market_events'),
+                            ('market_times_message_channel_id', 'market_times'),
+                        ]
+                        
+                        for config_key, channel_type in channel_mappings:
+                            channel_id = self.config.get(config_key)
+                            if channel_id and guild.get_channel(channel_id):
+                                await cursor.execute("""
+                                    INSERT INTO guild_channels (guild_id, channel_type, channel_id, settings)
+                                    VALUES (%s, %s, %s, %s)
+                                    ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)
+                                """, (guild.id, channel_type, channel_id, '{}'))
+                        
+                        await conn.commit()
+                        self.logger.info(f"Auto-configuration complete for guild {guild.name}")
+        except Exception as e:
+            self.logger.error(f"Error auto-configuring guild {guild.name}: {e}")
+    
+    async def on_guild_join(self, guild):
+        """Register new guild when bot joins"""
+        self.logger.info(f"Joined new guild: {guild.name} ({guild.id})")
+        await self.db.register_guild(guild.id, guild.name, guild.owner_id)
+        
+        # Send welcome message to the first available text channel
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                embed = discord.Embed(
+                    title="👋 Thanks for adding CryptoWatch Bot!",
+                    description=(
+                        "I'm here to help you track crypto markets and keep your community engaged.\n\n"
+                        "**Getting Started:**\n"
+                        "1. Run `!setup` to see configuration options\n"
+                        "2. Set up timezone channels with `!setup_timezone`\n"
+                        "3. Configure market tracking channels\n"
+                        "4. Enable engagement tracking (optional)\n\n"
+                        "**Need Help?**\n"
+                        "• Use `!help` to see all commands\n"
+                        "• Visit [our website](https://example.com)\n"
+                        "• Join our [support server](https://discord.gg/your-invite)\n\n"
+                        "_Note: Administrator permissions required for setup_"
+                    ),
+                    color=discord.Color.blue()
+                )
+                embed.set_footer(text="CryptoWatch Bot • example.com")
+                
+                try:
+                    await channel.send(embed=embed)
+                    break
+                except:
+                    continue
+    
+    async def close(self):
+        """Clean up database connection on shutdown"""
+        if hasattr(self, 'db'):
+            await self.db.close()
+        await super().close()
 
 def write_pid():
     """Write process ID to file for management scripts"""
