@@ -37,7 +37,7 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     
     # Set up separate loggers for each cog with their own files
-    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat']
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands']
     for cog_name in cog_loggers:
         cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
         cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging
@@ -50,6 +50,10 @@ def setup_logging():
         )
         cog_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         cog_logger.addHandler(cog_handler)
+        
+        # Also add console handler for crypto_commands and slash_commands for debugging
+        if cog_name in ['crypto_commands', 'slash_commands']:
+            cog_logger.addHandler(console_handler)
     
     # Error-only log file
     error_handler = RotatingFileHandler(
@@ -85,7 +89,7 @@ class CryptoWatchBot(commands.Bot):
         intents.presences = True  # For presence updates (privileged)
         
         super().__init__(
-            command_prefix='!',
+            command_prefix=commands.when_mentioned,  # Only respond to @mentions, effectively disabling ! commands
             intents=intents,
             description="CryptoWatch Bot - Timezones, Market Events & Crypto Data",
             help_command=None  # Disable default help

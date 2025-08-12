@@ -20,8 +20,11 @@ class SlashCommandBase(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = getattr(bot, 'config', {})
-        self.api_base_url = os.getenv('API_BASE_URL', 'http://cryptowatchtools-app-1:3000')
-        self.convex_url = os.getenv('VITE_CONVEX_URL', 'https://qualified-otter-813.convex.cloud')
+        # Use API URL from config, fallback to environment variable, then default
+        self.api_base_url = self.config.get('api_base_url', 
+                                           os.getenv('API_BASE_URL', 'http://app:5173/api'))
+        self.convex_url = self.config.get('convex_url',
+                                         os.getenv('VITE_CONVEX_URL', 'https://qualified-otter-813.convex.cloud'))
         logger.info(f"Using API base URL: {self.api_base_url}")
         logger.info(f"Using Convex URL: {self.convex_url}")
     

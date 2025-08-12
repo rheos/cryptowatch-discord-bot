@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .base import SlashCommandBase
 from .utils.formatters import format_funding_list, format_volatility_list, format_price_info
@@ -209,6 +210,7 @@ class CryptoCommands(SlashCommandBase):
                                 limit: Optional[int] = 10,
                                 symbol: Optional[str] = None):
         """Get volatility information"""
+        logger.info(f"Volatility command invoked - mode: {mode}, timeframe: {timeframe}, limit: {limit}, symbol: {symbol}")
         await interaction.response.defer()
         
         try:
@@ -223,27 +225,115 @@ class CryptoCommands(SlashCommandBase):
                 symbol = symbol.upper().replace('USDT', '').strip()
                 await self._handle_volatility_check(interaction, symbol, timeframe)
             
-            elif mode == "scanner":
-                url = f"{self.api_base_url}/api/volatility-scanner/summary?timeframe={timeframe}"
-                data = await self.fetch_json(url)
+            elif mode == "scanner" or mode == "movers":
+                # Use the actual volatility-scanner endpoint with thresholds
+                # Default thresholds for each timeframe
+                default_thresholds = {
+                    '5m': 2,
+                    '15m': 3,
+                    '30m': 4,
+                    '1h': 5,
+                    '2h': 7,
+                    '3h': 10,
+                    '4h': 12,
+                    '6h': 15,
+                    '12h': 20,
+                    '24h': 25,
+                    '48h': 30
+                }
                 
-                if not data:
+                # Get threshold for selected timeframe
+                threshold = default_thresholds.get(timeframe, 5)
+                url = f"{self.api_base_url}/volatility-scanner?{timeframe}={threshold}"
+                logger.info(f"Fetching volatility data from: {url}")
+                
+                data = await self.fetch_json(url)
+                logger.info(f"Received data - success: {data.get('success') if data else 'None'}")
+                
+                if not data or not data.get('success'):
                     await interaction.followup.send("❌ Failed to fetch volatility data")
                     return
                 
-                embed = self._create_volatility_scanner_embed(data, timeframe)
-                await interaction.followup.send(embed=embed)
-            
-            elif mode == "movers":
-                url = f"{self.api_base_url}/api/volatility-scanner/top-movers?timeframe={timeframe}&limit={limit}"
-                data = await self.fetch_json(url)
+                # Find the matching threshold data
+                threshold_data = None
+                for t in data.get('thresholds', []):
+                    # Convert hours to timeframe string
+                    hours = t['hours']
+                    if hours < 1:
+                        tf = f"{int(hours * 60)}m"
+                    else:
+                        tf = f"{int(hours)}h"
+                        
+                    if tf == timeframe:
+                        threshold_data = t
+                        break
                 
-                if not data or 'movers' not in data:
-                    await interaction.followup.send("❌ Failed to fetch volatility data")
+                if not threshold_data or not threshold_data.get('coins'):
+                    await interaction.followup.send(f"No coins found with ≥{threshold}% movement in {timeframe}")
                     return
                 
-                embed = self._create_movers_embed(data['movers'], timeframe, limit)
-                await interaction.followup.send(embed=embed)
+                if mode == "scanner":
+                    # Create scanner embed showing summary
+                    embed = discord.Embed(
+                        title=f"📊 Volatility Scanner - {timeframe}",
+                        description=f"Coins with ≥{threshold}% price movement",
+                        color=discord.Color.blue(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    coins = threshold_data['coins']
+                    embed.add_field(
+                        name="Total Coins",
+                        value=f"{len(coins)} coins",
+                        inline=True
+                    )
+                    
+                    # Get top 5 movers
+                    sorted_coins = sorted(coins, key=lambda x: abs(float(x['percentChange'])), reverse=True)[:5]
+                    if sorted_coins:
+                        movers_text = []
+                        for i, coin in enumerate(sorted_coins, 1):
+                            percent = float(coin['percentChange'])
+                            emoji = "📈" if percent > 0 else "📉"
+                            movers_text.append(f"{i}. {emoji} **{coin['symbol']}** `{percent:+.1f}%`")
+                        
+                        embed.add_field(
+                            name="Top Movers",
+                            value="\n".join(movers_text),
+                            inline=False
+                        )
+                    
+                    await interaction.followup.send(embed=embed)
+                    
+                else:  # mode == "movers"
+                    # Create detailed movers list
+                    coins = sorted(threshold_data['coins'], 
+                                 key=lambda x: abs(float(x['percentChange'])), 
+                                 reverse=True)[:limit]
+                    
+                    embed = discord.Embed(
+                        title=f"💹 Top Movers - {timeframe}",
+                        description=f"Most volatile symbols (≥{threshold}% movement)",
+                        color=discord.Color.blue(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    if coins:
+                        for coin in coins:
+                            percent = float(coin['percentChange'])
+                            emoji = "📈" if percent > 0 else "📉"
+                            color_indicator = "🟢" if percent > 0 else "🔴"
+                            
+                            embed.add_field(
+                                name=f"{emoji} {coin['symbol']}",
+                                value=f"{color_indicator} {percent:.2f}%\n"
+                                      f"${float(coin['currentPrice']):.4f}",
+                                inline=True
+                            )
+                    else:
+                        embed.description = "No significant movers found"
+                    
+                    await interaction.followup.send(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error in volatility command: {e}")
