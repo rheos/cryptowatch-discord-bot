@@ -24,6 +24,7 @@ from cogs.volatility_cog import VolatilityCog
 from cogs.engagement_cog import EngagementCog
 from cogs.ai_chat_cog import AIChatCog
 from cogs.setup_cog import SetupCog
+# Slash commands imported dynamically in setup_hook
 
 # Set up logging
 def setup_logging():
@@ -110,6 +111,12 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(VolatilityCog(self, self.config))
         await self.add_cog(EngagementCog(self, self.config))
         await self.add_cog(AIChatCog(self, self.config))
+        # Load modular slash commands
+        from cogs.slash_commands import CryptoCommands, UserCommands
+        from cogs.slash_commands.admin_commands_v2 import AdminCommands
+        await self.add_cog(CryptoCommands(self))
+        await self.add_cog(UserCommands(self))
+        await self.add_cog(AdminCommands(self))
         
         self.logger.info("All cogs loaded successfully")
     
@@ -117,6 +124,25 @@ class CryptoWatchBot(commands.Bot):
         """Bot is ready and connected"""
         self.logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         self.logger.info(f"Connected to {len(self.guilds)} guild(s)")
+        
+        # Sync slash commands
+        try:
+            # Copy global commands to guild for development
+            # This allows instant updates without waiting for Discord's cache
+            for guild in self.guilds:
+                guild_obj = discord.Object(id=guild.id)
+                
+                # Copy all global commands to this guild
+                self.tree.copy_global_to(guild=guild_obj)
+                
+                synced = await self.tree.sync(guild=guild_obj)
+                self.logger.info(f"Synced {len(synced)} slash commands to guild {guild.name}")
+                
+            # TODO: When ready for multi-guild, switch to global commands only:
+            # synced = await self.tree.sync()
+            # self.logger.info(f"Synced {len(synced)} slash commands globally")
+        except Exception as e:
+            self.logger.error(f"Failed to sync slash commands: {e}", exc_info=True)
         
         # Register all connected guilds
         for guild in self.guilds:
@@ -132,7 +158,7 @@ class CryptoWatchBot(commands.Bot):
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="crypto markets | !help"
+                name="crypto markets | /help"
             )
         )
     

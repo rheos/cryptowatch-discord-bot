@@ -26,10 +26,10 @@ class SetupCog(commands.Cog):
         embed.add_field(
             name="Available Setup Commands",
             value=(
-                "`!setup_timezone #channel timezone` - Set up a timezone channel\n"
-                "`!setup_market_events #channel` - Set market events channel\n"
-                "`!setup_funding #channel` - Set funding rates channel\n"
-                "`!setup_alerts #channel` - Set alerts channel\n"
+                "`!setup_timezone #voice-channel timezone` - Set up a timezone channel (voice channel required)\n"
+                "`!setup_market_events #text-channel` - Set market events channel\n"
+                "`!setup_funding #text-channel` - Set funding rates channel\n"
+                "`!setup_alerts #text-channel` - Set alerts channel\n"
                 "`!setup_engagement` - Configure engagement tracking\n"
                 "`!setup_show` - Show current configuration"
             ),
@@ -40,8 +40,8 @@ class SetupCog(commands.Cog):
     
     @commands.command()
     @commands.has_permissions(administrator=True)
-    async def setup_timezone(self, ctx, channel: discord.TextChannel, *, timezone: str):
-        """Set up a timezone channel"""
+    async def setup_timezone(self, ctx, channel: discord.VoiceChannel, *, timezone: str):
+        """Set up a timezone channel (voice channel - allows flexible naming with spaces/colons)"""
         guild_id = ctx.guild.id
         
         # Validate timezone

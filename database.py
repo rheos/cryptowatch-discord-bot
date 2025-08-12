@@ -1,10 +1,11 @@
 """
-Database connection and utilities for Discord bot
+Database connection and utilities for Discord bot - Version 2 with improved schema
 """
 import aiomysql
 import logging
 import json
-from typing import Optional
+from typing import Optional, Dict, Any, List
+from datetime import datetime, date, timedelta
 from migrations.migration_runner import MigrationRunner
 
 logger = logging.getLogger('discord-bot.database')
@@ -48,61 +49,187 @@ class BotDatabase:
             await self.pool.wait_closed()
             logger.info("Database connection pool closed")
     
-    async def get_guild_settings(self, guild_id: int) -> dict:
-        """Get settings for a guild"""
+    # Guild Management
+    async def register_guild(self, guild_id: int, guild_name: str, owner_id: int):
+        """Register a new guild"""
         async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cursor:
-                # Get basic guild info
+            async with conn.cursor() as cursor:
                 await cursor.execute("""
-                    SELECT * FROM guilds WHERE guild_id = %s
-                """, (guild_id,))
-                guild = await cursor.fetchone()
+                    INSERT INTO guilds (guild_id, guild_name, owner_id)
+                    VALUES (%s, %s, %s) AS new_values
+                    ON DUPLICATE KEY UPDATE 
+                        guild_name = new_values.guild_name,
+                        owner_id = new_values.owner_id,
+                        updated_at = NOW()
+                """, (guild_id, guild_name, owner_id))
                 
-                if not guild:
+                await conn.commit()
+                logger.info(f"Registered guild: {guild_name} ({guild_id})")
+    
+    # Settings Management (EAV Pattern)
+    async def get_setting(self, guild_id: int, setting_key: str) -> Optional[Any]:
+        """Get a single setting value"""
+        async with self.pool.acquire() as conn:
+            # Ensure we're reading fresh data by committing any pending transactions
+            await conn.commit()
+            
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                # First try to get guild-specific setting
+                await cursor.execute("""
+                    SELECT setting_value, setting_type
+                    FROM guild_settings gs
+                    JOIN settings_definitions sd ON gs.setting_key = sd.setting_key
+                    WHERE guild_id = %s AND gs.setting_key = %s
+                """, (guild_id, setting_key))
+                
+                result = await cursor.fetchone()
+                
+                # If no guild setting, get default
+                if not result:
+                    await cursor.execute("""
+                        SELECT default_value as setting_value, setting_type
+                        FROM settings_definitions
+                        WHERE setting_key = %s
+                    """, (setting_key,))
+                    result = await cursor.fetchone()
+                
+                if not result:
                     return None
                 
-                # Get settings
-                await cursor.execute("""
-                    SELECT * FROM guild_settings WHERE guild_id = %s
-                """, (guild_id,))
-                settings = await cursor.fetchone()
+                # Convert value based on type
+                return self._convert_setting_value(result['setting_value'], result['setting_type'])
+    
+    async def set_setting(self, guild_id: int, setting_key: str, value: Any, updated_by: int = None):
+        """Set a setting value"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                # Convert value to string
+                str_value = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
                 
-                # Get channels
                 await cursor.execute("""
-                    SELECT channel_type, channel_id, settings 
-                    FROM guild_channels WHERE guild_id = %s
-                """, (guild_id,))
-                channels = {}
+                    INSERT INTO guild_settings (guild_id, setting_key, setting_value, updated_by)
+                    VALUES (%s, %s, %s, %s) AS new_values
+                    ON DUPLICATE KEY UPDATE 
+                        setting_value = new_values.setting_value,
+                        updated_by = new_values.updated_by,
+                        updated_at = NOW()
+                """, (guild_id, setting_key, str_value, updated_by))
+                
+                await conn.commit()
+    
+    async def get_all_settings(self, guild_id: int, category: str = None) -> Dict[str, Any]:
+        """Get all settings for a guild"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                query = """
+                    SELECT 
+                        sd.setting_key,
+                        COALESCE(gs.setting_value, sd.default_value) as value,
+                        sd.setting_type,
+                        sd.description,
+                        sd.category
+                    FROM settings_definitions sd
+                    LEFT JOIN guild_settings gs ON sd.setting_key = gs.setting_key AND gs.guild_id = %s
+                """
+                params = [guild_id]
+                
+                if category:
+                    query += " WHERE sd.category = %s"
+                    params.append(category)
+                
+                await cursor.execute(query, params)
+                
+                settings = {}
                 for row in await cursor.fetchall():
-                    channels[row['channel_type']] = {
-                        'id': row['channel_id'],
-                        'settings': json.loads(row['settings']) if row['settings'] else {}
+                    value = self._convert_setting_value(row['value'], row['setting_type'])
+                    settings[row['setting_key']] = {
+                        'value': value,
+                        'description': row['description'],
+                        'category': row['category']
                     }
                 
-                return {
-                    'guild': guild,
-                    'settings': settings,
-                    'channels': channels
-                }
+                return settings
     
+    def _convert_setting_value(self, value: str, setting_type: str) -> Any:
+        """Convert setting value from string to appropriate type"""
+        if value is None:
+            return None
+            
+        if setting_type == 'boolean':
+            return value.lower() in ('true', '1', 'yes', 'on')
+        elif setting_type == 'integer':
+            return int(value)
+        elif setting_type == 'json':
+            return json.loads(value)
+        else:  # string
+            return value
+    
+    # Channel Management
+    async def configure_guild_channel(self, guild_id: int, channel_type: str, channel_id: int, 
+                                    settings: dict = None, channel_subtype: str = None):
+        """Configure a channel for a guild"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("""
+                    INSERT INTO guild_channels (guild_id, channel_type, channel_subtype, channel_id, settings)
+                    VALUES (%s, %s, %s, %s, %s) AS new_values
+                    ON DUPLICATE KEY UPDATE 
+                        settings = new_values.settings,
+                        updated_at = NOW()
+                """, (guild_id, channel_type, channel_subtype, channel_id, json.dumps(settings or {})))
+                await conn.commit()
+    
+    async def get_guild_channels(self, guild_id: int, channel_type: str = None) -> List[Dict[str, Any]]:
+        """Get configured channels for a guild"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                query = "SELECT * FROM guild_channels WHERE guild_id = %s"
+                params = [guild_id]
+                
+                if channel_type:
+                    query += " AND channel_type = %s"
+                    params.append(channel_type)
+                
+                await cursor.execute(query, params)
+                
+                channels = []
+                for row in await cursor.fetchall():
+                    channel_data = dict(row)
+                    if channel_data['settings']:
+                        channel_data['settings'] = json.loads(channel_data['settings'])
+                    channels.append(channel_data)
+                
+                return channels
+    
+    async def remove_guild_channel(self, guild_id: int, channel_id: int) -> bool:
+        """Remove a channel configuration by channel ID"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("""
+                    DELETE FROM guild_channels 
+                    WHERE guild_id = %s AND channel_id = %s
+                """, (guild_id, channel_id))
+                affected = cursor.rowcount
+                await conn.commit()
+                return affected > 0
+    
+    # Activity Tracking
     async def track_message(self, guild_id: int, user_id: int):
         """Track a message from a user"""
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Update daily activity
                 await cursor.execute("""
-                    INSERT INTO member_activity (guild_id, user_id, date, message_count)
+                    INSERT INTO member_activity_daily (guild_id, user_id, activity_date, message_count)
                     VALUES (%s, %s, CURDATE(), 1)
                     ON DUPLICATE KEY UPDATE message_count = message_count + 1
                 """, (guild_id, user_id))
                 
                 # Update member status
                 await cursor.execute("""
-                    INSERT INTO member_status (guild_id, user_id, last_message_at, total_messages)
-                    VALUES (%s, %s, NOW(), 1)
-                    ON DUPLICATE KEY UPDATE 
-                        last_message_at = NOW(),
-                        total_messages = total_messages + 1
+                    INSERT INTO member_status (guild_id, user_id, last_message_at)
+                    VALUES (%s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE last_message_at = NOW()
                 """, (guild_id, user_id))
                 
                 await conn.commit()
@@ -114,34 +241,155 @@ class BotDatabase:
                 await cursor.execute("""
                     SELECT 
                         SUM(message_count) as total_messages,
-                        COUNT(DISTINCT date) as active_days,
-                        MAX(date) as last_active_date
-                    FROM member_activity
+                        COUNT(DISTINCT activity_date) as active_days,
+                        MAX(activity_date) as last_active_date
+                    FROM member_activity_daily
                     WHERE guild_id = %s 
                         AND user_id = %s 
-                        AND date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                        AND activity_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
                 """, (guild_id, user_id, days))
                 
                 return await cursor.fetchone()
     
-    async def register_guild(self, guild_id: int, guild_name: str, owner_id: int):
-        """Register a new guild"""
+    async def get_active_members(self, guild_id: int, threshold: int = 10, days: int = 30) -> list:
+        """Get members who meet the activity threshold"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute("""
+                    SELECT 
+                        user_id,
+                        SUM(message_count) as total_messages,
+                        COUNT(DISTINCT activity_date) as active_days,
+                        MAX(activity_date) as last_active_date
+                    FROM member_activity_daily
+                    WHERE guild_id = %s 
+                        AND activity_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                    GROUP BY user_id
+                    HAVING total_messages >= %s
+                    ORDER BY total_messages DESC
+                """, (guild_id, days, threshold))
+                
+                return await cursor.fetchall()
+    
+    async def get_all_member_stats(self, guild_id: int, days: int = 30) -> list:
+        """Get statistics for all members in a guild"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute("""
+                    SELECT 
+                        user_id,
+                        SUM(message_count) as total_messages,
+                        COUNT(DISTINCT activity_date) as active_days,
+                        MAX(activity_date) as last_active_date
+                    FROM member_activity_daily
+                    WHERE guild_id = %s 
+                        AND activity_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                    GROUP BY user_id
+                    ORDER BY total_messages DESC
+                """, (guild_id, days))
+                
+                return await cursor.fetchall()
+    
+    # Audit Logging
+    async def log_action(self, guild_id: int, user_id: int, action: str, 
+                        entity_type: str = None, entity_id: str = None,
+                        old_value: Any = None, new_value: Any = None):
+        """Log an action for audit trail"""
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("""
-                    INSERT INTO guilds (guild_id, guild_name, owner_id)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE 
-                        guild_name = VALUES(guild_name),
-                        owner_id = VALUES(owner_id),
-                        updated_at = NOW()
-                """, (guild_id, guild_name, owner_id))
+                old_json = json.dumps(old_value) if old_value is not None else None
+                new_json = json.dumps(new_value) if new_value is not None else None
                 
-                # Insert default settings
                 await cursor.execute("""
-                    INSERT IGNORE INTO guild_settings (guild_id)
-                    VALUES (%s)
-                """, (guild_id,))
+                    INSERT INTO audit_log 
+                    (guild_id, user_id, action, entity_type, entity_id, old_value, new_value)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (guild_id, user_id, action, entity_type, entity_id, old_json, new_json))
                 
                 await conn.commit()
-                logger.info(f"Registered guild: {guild_name} ({guild_id})")
+    
+    # Compatibility methods for engagement features
+    async def get_engagement_settings(self, guild_id: int) -> dict:
+        """Get engagement settings for a guild (compatibility method)"""
+        settings = {}
+        
+        # Get all engagement settings
+        engagement_keys = [
+            'engagement.enabled',
+            'engagement.messages_threshold',
+            'engagement.days_threshold',
+            'engagement.warning_days',
+            'engagement.warning_min_messages',
+            'engagement.dm_warnings'
+        ]
+        
+        for key in engagement_keys:
+            value = await self.get_setting(guild_id, key)
+            # Map to old field names for compatibility
+            if key == 'engagement.enabled':
+                settings['enabled'] = value
+            elif key == 'engagement.messages_threshold':
+                settings['active_messages_threshold'] = value
+            elif key == 'engagement.days_threshold':
+                settings['active_days_threshold'] = value
+            elif key == 'engagement.warning_days':
+                settings['warning_days_before'] = value
+            elif key == 'engagement.warning_min_messages':
+                settings['warning_min_messages'] = value
+            elif key == 'engagement.dm_warnings':
+                settings['dm_warnings_enabled'] = value
+        
+        return settings
+    
+    async def update_engagement_settings(self, guild_id: int, **kwargs):
+        """Update engagement settings (compatibility method)"""
+        # Map old field names to new setting keys
+        field_mapping = {
+            'enabled': 'engagement.enabled',
+            'active_messages_threshold': 'engagement.messages_threshold',
+            'active_days_threshold': 'engagement.days_threshold',
+            'warning_days_before': 'engagement.warning_days',
+            'warning_min_messages': 'engagement.warning_min_messages',
+            'dm_warnings_enabled': 'engagement.dm_warnings'
+        }
+        
+        for old_field, value in kwargs.items():
+            if old_field in field_mapping:
+                await self.set_setting(guild_id, field_mapping[old_field], value)
+    
+    async def get_guild_settings(self, guild_id: int) -> dict:
+        """Get all settings for a guild (compatibility method)"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                # Get basic guild info
+                await cursor.execute("""
+                    SELECT * FROM guilds WHERE guild_id = %s
+                """, (guild_id,))
+                guild = await cursor.fetchone()
+                
+                if not guild:
+                    return None
+                
+                # Get all settings
+                settings = await self.get_all_settings(guild_id)
+                
+                # Get channels
+                channels = {}
+                channel_list = await self.get_guild_channels(guild_id)
+                for channel in channel_list:
+                    if channel['channel_subtype']:
+                        # For timezone channels
+                        key = f"{channel['channel_type']}_{channel['channel_subtype'].replace('/', '_')}"
+                    else:
+                        key = channel['channel_type']
+                    
+                    channels[key] = {
+                        'id': channel['channel_id'],
+                        'settings': channel['settings']
+                    }
+                
+                return {
+                    'guild': guild,
+                    'settings': settings,
+                    'channels': channels
+                }

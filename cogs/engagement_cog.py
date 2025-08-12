@@ -248,14 +248,23 @@ class EngagementCog(commands.Cog):
         """Handle new member joins"""
         try:
             guild = member.guild
+            
+            # Check if engagement is enabled for this guild
+            settings = await self.bot.db.get_engagement_settings(guild.id)
+            if not settings or not settings.get('enabled'):
+                self.logger.debug(f"Engagement not enabled for guild {guild.name}")
+                return
+            
             newmember_role = discord.utils.get(guild.roles, name=self.NEWMEMBER_ROLE)
             
             if newmember_role:
                 await member.add_roles(newmember_role)
                 self.logger.info(f"Added NewMember role to {member.name}")
+            else:
+                self.logger.warning(f"NewMember role not found in guild {guild.name}")
                 
         except Exception as e:
-            self.logger.error(f"Error handling member join: {e}")
+            self.logger.error(f"Error handling member join: {e}", exc_info=True)
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -268,22 +277,28 @@ class EngagementCog(commands.Cog):
             member = message.author
             guild = message.guild
             
-            # Track message in database
+            # Always track message in database for analytics
             try:
                 await self.bot.db.track_message(guild.id, member.id)
             except Exception as e:
                 self.logger.error(f"Error tracking message: {e}")
             
+            # Check if engagement is enabled for role assignment
+            settings = await self.bot.db.get_engagement_settings(guild.id)
+            if not settings or not settings.get('enabled'):
+                return
+            
             newmember_role = discord.utils.get(guild.roles, name=self.NEWMEMBER_ROLE)
             member_role = discord.utils.get(guild.roles, name=self.MEMBER_ROLE)
             
-            # If user has NewMember role and posts in welcome-chat, upgrade to Member
+            # If user has NewMember role and sends their first message, upgrade to Member
             if newmember_role and newmember_role in member.roles:
-                if message.channel.name == self.channels_config.get('welcome_chat', 'welcome-chat'):
-                    if member_role:
-                        await member.add_roles(member_role)
-                        await member.remove_roles(newmember_role)
-                        self.logger.info(f"Upgraded {member.name} from NewMember to Member")
+                if member_role:
+                    await member.add_roles(member_role)
+                    await member.remove_roles(newmember_role)
+                    self.logger.info(f"Upgraded {member.name} from NewMember to Member after first message")
+                else:
+                    self.logger.warning(f"Member role not found in guild {guild.name}")
     
     # Admin Commands
     @commands.command()
