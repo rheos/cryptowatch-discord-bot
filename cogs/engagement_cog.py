@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import asyncio
 import aiomysql
+import time
 
 class EngagementCog(commands.Cog):
     def __init__(self, bot, config=None):
@@ -57,6 +58,11 @@ class EngagementCog(commands.Cog):
         else:
             self.warnings_start_date = None
         
+        # Message buffer to reduce database writes
+        self.message_buffer = defaultdict(lambda: defaultdict(int))
+        self.buffer_lock = asyncio.Lock()
+        self.last_flush_time = time.time()
+        
         # Cache for member activity
         self.member_activity = defaultdict(lambda: {"messages": 0, "last_active": None})
         
@@ -66,12 +72,70 @@ class EngagementCog(commands.Cog):
         # Start background tasks only if enabled
         if self.enabled:
             self.check_activity.start()
+            self.flush_message_buffer.start()
             self.logger.info("EngagementCog initialized and enabled")
         else:
             self.logger.info("EngagementCog initialized but disabled")
     
     def cog_unload(self):
         self.check_activity.cancel()
+        self.flush_message_buffer.cancel()
+        # Flush any remaining messages before unloading
+        asyncio.create_task(self._flush_buffer())
+    
+    @tasks.loop(seconds=60)
+    async def flush_message_buffer(self):
+        """Flush message buffer at the 30-second mark to avoid conflict with price collection"""
+        # Wait until we're at the 30-second mark
+        current_second = datetime.now().second
+        if current_second < 30:
+            await asyncio.sleep(30 - current_second)
+        elif current_second > 30:
+            await asyncio.sleep(90 - current_second)
+        
+        # Now we're at the 30-second mark, flush the buffer
+        await self._flush_buffer()
+    
+    async def _flush_buffer(self):
+        """Flush the message buffer to database"""
+        async with self.buffer_lock:
+            if not self.message_buffer:
+                return
+            
+            # Copy and clear buffer
+            buffer_copy = dict(self.message_buffer)
+            self.message_buffer.clear()
+        
+        # Batch update to database
+        try:
+            updates = []
+            for guild_id, user_counts in buffer_copy.items():
+                for user_id, count in user_counts.items():
+                    updates.append((guild_id, user_id, count))
+            
+            if updates:
+                async with self.bot.db.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        # Batch update all message counts
+                        await cursor.executemany("""
+                            INSERT INTO member_activity_daily (guild_id, user_id, activity_date, message_count)
+                            VALUES (%s, %s, CURDATE(), %s)
+                            ON DUPLICATE KEY UPDATE message_count = message_count + VALUES(message_count)
+                        """, updates)
+                        
+                        # Update last_message_at for all users
+                        for guild_id, user_id, _ in updates:
+                            await cursor.execute("""
+                                INSERT INTO member_status (guild_id, user_id, last_message_at)
+                                VALUES (%s, %s, NOW())
+                                ON DUPLICATE KEY UPDATE last_message_at = NOW()
+                            """, (guild_id, user_id))
+                        
+                        await conn.commit()
+                
+                self.logger.info(f"Flushed {len(updates)} user message counts to database")
+        except Exception as e:
+            self.logger.error(f"Error flushing message buffer: {e}", exc_info=True)
     
     @tasks.loop(hours=24)
     async def check_activity(self):
@@ -277,11 +341,9 @@ class EngagementCog(commands.Cog):
             member = message.author
             guild = message.guild
             
-            # Always track message in database for analytics
-            try:
-                await self.bot.db.track_message(guild.id, member.id)
-            except Exception as e:
-                self.logger.error(f"Error tracking message: {e}")
+            # Buffer the message instead of writing to database immediately
+            async with self.buffer_lock:
+                self.message_buffer[guild.id][member.id] += 1
             
             # Check if engagement is enabled for role assignment
             settings = await self.bot.db.get_engagement_settings(guild.id)
@@ -330,9 +392,9 @@ class EngagementCog(commands.Cog):
                     for days in [7, 30, 90]:
                         await cursor.execute("""
                             SELECT COUNT(DISTINCT user_id) as active_users
-                            FROM member_activity
+                            FROM member_activity_daily
                             WHERE guild_id = %s 
-                            AND date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                            AND activity_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
                             AND message_count > 0
                         """, (guild.id, days))
                         result = await cursor.fetchone()
@@ -349,10 +411,10 @@ class EngagementCog(commands.Cog):
                         SELECT 
                             user_id,
                             SUM(message_count) as total_messages,
-                            COUNT(DISTINCT date) as active_days
-                        FROM member_activity
+                            COUNT(DISTINCT activity_date) as active_days
+                        FROM member_activity_daily
                         WHERE guild_id = %s
-                        AND date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+                        AND activity_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
                         GROUP BY user_id
                         ORDER BY total_messages DESC
                         LIMIT 10

@@ -1,18 +1,23 @@
 """
 Cryptocurrency-related slash commands: /price, /funding, /volatility
+Thin wrapper that delegates to CryptoDataCog methods
 """
 import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
+import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .base import SlashCommandBase
 from .utils.formatters import format_funding_list, format_volatility_list, format_price_info
+from utils.crypto_api import CryptoAPI
+import aiohttp
 
 logger = logging.getLogger('discord-bot.crypto_commands')
 
-# Configuration for each funding mode
+# Configuration for each funding mode - defines display properties for each funding analysis type
+# This config is used to customize embed titles, colors, and messages for different modes
 FUNDING_CONFIGS = {
     'negative': {
         'endpoint': '/most-negative',
@@ -68,48 +73,83 @@ FUNDING_CONFIGS = {
 }
 
 class CryptoCommands(SlashCommandBase):
-    """Cryptocurrency-related slash commands"""
+    """
+    Cryptocurrency-related slash commands - delegates to CryptoDataCog
+    
+    This class provides Discord slash commands for cryptocurrency data:
+    - /price - Get current price of a cryptocurrency
+    - /funding - Analyze BloFin funding rates
+    - /volatility - Track price volatility and top movers
+    
+    It acts as a thin wrapper, reusing the existing CryptoDataCog's session
+    and calling the same API endpoints that the prefix commands (!) use.
+    """
+    
+    def __init__(self, bot):
+        """
+        Initialize the crypto commands cog
+        
+        Args:
+            bot: The Discord bot instance
+        """
+        super().__init__(bot)
+        # Reference to CryptoDataCog to reuse its session and methods
+        self.crypto_cog = None
+        # API client instance
+        self.api_client = None
+    
+    async def cog_load(self):
+        """
+        Initialize API client when cog loads
+        Attempts to find and reference the CryptoDataCog for API client reuse
+        """
+        # Try to find the CryptoDataCog if it's loaded
+        # This allows us to reuse its API client and session
+        for cog_name, cog in self.bot.cogs.items():
+            if 'CryptoDataCog' in cog.__class__.__name__:
+                self.crypto_cog = cog
+                logger.info("Found CryptoDataCog for delegation")
+                break
+        
+        # Get or create API client
+        if self.crypto_cog and hasattr(self.crypto_cog, 'get_api_client'):
+            self.api_client = self.crypto_cog.get_api_client()
+        else:
+            # Create our own API client if CryptoDataCog not available
+            self.api_client = CryptoAPI(self.api_base_url)
+    
+    async def cog_unload(self):
+        """
+        Cleanup when cog unloads
+        Properly closes the API client if we own it
+        """
+        # Only close if we created our own client
+        if self.api_client and not self.crypto_cog:
+            await self.api_client.close()
     
     @app_commands.command(name="price", description="Get the current price of a cryptocurrency")
     @app_commands.describe(symbol="The cryptocurrency symbol (e.g., BTC, ETH)")
     async def price_command(self, interaction: discord.Interaction, symbol: str):
-        """Get cryptocurrency price"""
+        """
+        Get cryptocurrency price from either our API cache or Binance directly
+        
+        Args:
+            interaction: Discord interaction object
+            symbol: Cryptocurrency symbol (e.g., BTC, ETH)
+        """
+        # Defer response since API calls might take time
         await interaction.response.defer()
         
-        # Clean up symbol
-        symbol = symbol.upper().replace('USDT', '').strip()
-        
         try:
-            # Try primary endpoint first
-            url = f"{self.api_base_url}/api/volatility-scanner/price-data"
-            data = await self.fetch_json(url, timeout=5)
+            # Get price data using the API client
+            price_data = await self.api_client.get_symbol_price(symbol)
             
-            if data and 'symbols' in data:
-                # Look for the symbol in the data
-                symbol_data = None
-                for sym, info in data['symbols'].items():
-                    if sym.replace('-USDT', '').replace('USDT', '') == symbol:
-                        symbol_data = info
-                        break
-                
-                if symbol_data:
-                    embed = format_price_info(symbol, symbol_data)
-                    await interaction.followup.send(embed=embed)
-                    return
-            
-            # If not found, try Binance API directly
-            binance_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}USDT"
-            ticker_data = await self.fetch_json(binance_url, timeout=5)
-            
-            if ticker_data:
-                price_data = {
-                    'price': float(ticker_data.get('lastPrice', 0)),
-                    'priceChangePercent': float(ticker_data.get('priceChangePercent', 0)),
-                    'volume': float(ticker_data.get('volume', 0))
-                }
-                embed = format_price_info(symbol, price_data)
+            if price_data:
+                # Format and send the price info
+                embed = format_price_info(symbol.upper().replace('USDT', '').strip(), price_data)
                 await interaction.followup.send(embed=embed)
             else:
+                # Symbol not found
                 await interaction.followup.send(f"❌ Could not find price data for **{symbol}**")
                 
         except Exception as e:
@@ -134,55 +174,191 @@ class CryptoCommands(SlashCommandBase):
                            mode: str, 
                            limit: Optional[int] = 10,
                            symbol: Optional[str] = None):
-        """Get funding rate information from BloFin"""
+        """
+        Get funding rate information from BloFin exchange
+        
+        Funding rates indicate the sentiment of perpetual futures traders:
+        - Negative rates: More shorts than longs (bearish sentiment)
+        - Positive rates: More longs than shorts (bullish sentiment)
+        
+        Args:
+            interaction: Discord interaction object
+            mode: Type of analysis (negative, scanner, improving, worsening, turned, check)
+            limit: Number of results to display (default 10)
+            symbol: Specific symbol to check (only for 'check' mode)
+        """
+        logger.info(f"Funding command invoked - mode: {mode}, limit: {limit}, symbol: {symbol}")
         await interaction.response.defer()
         
-        config = FUNDING_CONFIGS.get(mode, FUNDING_CONFIGS['negative'])
-        
-        # Handle single symbol check
-        if mode == 'check':
-            if not symbol:
-                await interaction.followup.send("❌ Please provide a symbol to check (e.g., `/funding check symbol:BTC`)")
-                return
-            
-            symbol = symbol.upper().replace('USDT', '').strip()
-            url = f"{self.api_base_url}/api/funding-rates{config['endpoint']}/{symbol}"
-        else:
-            # Construct URL for list endpoints
-            url = f"{self.api_base_url}/api/funding-rates{config['endpoint']}"
-            if limit and limit != 10:
-                url += f"?limit={limit}"
-        
         try:
-            data = await self.fetch_json(url)
-            
-            if not data:
-                embed = await self.create_error_embed(
-                    "API Error",
-                    "Failed to fetch funding rate data. Please try again later."
+            # Scanner mode: Fetch all 4 funding categories and show overview
+            # This gives a comprehensive market snapshot
+            if mode == 'scanner':
+                # Get comprehensive scanner data using API client
+                results = await self.api_client.get_funding_scanner_data()
+                
+                # Create overview embed with all categories
+                embed = discord.Embed(
+                    title="🔍 Funding Scanner Overview",
+                    description="Current market funding rates",
+                    color=discord.Color.gold(),
+                    timestamp=datetime.utcnow()
                 )
+                
+                # Add Most Negative section - coins with extreme negative funding
+                # These are potential short squeeze candidates
+                if results.get('most_negative'):
+                    most_neg = results['most_negative'][:5]  # Top 5 only for overview
+                    if most_neg:
+                        value = "\n".join([
+                            f"**{self.api_client.format_symbol(r['instId'])}**: {self.api_client.format_percentage(float(r['currentRate']))}"
+                            for r in most_neg
+                        ])
+                        embed.add_field(name="🔴 Most Negative", value=value, inline=False)
+                
+                # Add Turned Positive section - recently flipped from negative to positive
+                # These indicate potential trend reversals
+                if results.get('turned_positive'):
+                    turned = results['turned_positive'][:5]
+                    if turned:
+                        value = "\n".join([
+                            f"**{self.api_client.format_symbol(r['instId'])}**: {self.api_client.format_percentage(float(r['currentRate']))}"
+                            for r in turned
+                        ])
+                        embed.add_field(name="🟢 Turned Positive", value=value, inline=False)
+                
+                # Add Worsening section - becoming more negative
+                # Indicates increasing short interest
+                if results.get('worsening'):
+                    worse = results['worsening'][:5]
+                    if worse:
+                        value = "\n".join([
+                            f"**{self.api_client.format_symbol(r['instId'])}**: {self.api_client.format_percentage(float(r['currentRate']))}"
+                            for r in worse
+                        ])
+                        embed.add_field(name="🟠 Worsening", value=value, inline=False)
+                
+                # Add Improving section - becoming less negative
+                # Shorts may be closing, potential bullish signal
+                if results.get('improving'):
+                    improving = results['improving'][:5]
+                    if improving:
+                        value = "\n".join([
+                            f"**{self.api_client.format_symbol(r['instId'])}**: {self.api_client.format_percentage(float(r['currentRate']))}"
+                            for r in improving
+                        ])
+                        embed.add_field(name="🟡 Improving", value=value, inline=False)
+                
+                embed.set_footer(text="Use /funding with specific modes for detailed views")
                 await interaction.followup.send(embed=embed)
                 return
             
-            # Handle scanner summary mode
-            if config.get('is_summary'):
-                embed = self._create_scanner_embed(data)
-            # Handle single symbol check
-            elif config.get('is_single'):
-                embed = self._create_single_funding_embed(symbol, data, config)
-            # Handle list modes
+            # For non-scanner modes: Use appropriate API method
+            if mode == 'negative':
+                rates = await self.api_client.get_most_negative_rates(limit)
+            elif mode == 'turned':
+                rates = await self.api_client.get_turned_positive_rates(limit)
+            elif mode == 'improving':
+                rates = await self.api_client.get_improving_negative_rates(limit)
+            elif mode == 'worsening':
+                rates = await self.api_client.get_worsening_negative_rates(limit)
             else:
-                embed = self._create_funding_list_embed(data, config, limit)
+                await interaction.followup.send("❌ Invalid mode selected")
+                return
             
-            await interaction.followup.send(embed=embed)
-            
+            if rates:
+                # Create mode-specific embed based on the type of analysis
+                if mode == 'negative':
+                    # Most negative funding rates - extreme short interest
+                    embed = discord.Embed(
+                        title="🔴 Most Negative",
+                        description=f"Top {len(rates)} coins with extreme negative funding rates",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Display as numbered list with funding percentages
+                    for i, rate in enumerate(rates, 1):
+                        symbol = self.api_client.format_symbol(rate['instId'])
+                        funding_pct = self.api_client.format_percentage(float(rate['currentRate']), 4)
+                        embed.add_field(
+                            name=f"{i}. {symbol}",
+                            value=funding_pct,
+                            inline=True
+                        )
+                
+                elif mode == 'turned':
+                    # Recently turned positive - potential trend reversal
+                    embed = discord.Embed(
+                        title="🟢 Turned Positive",
+                        description="Recently flipped from negative to positive funding",
+                        color=discord.Color.green(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Show current vs previous rates to highlight the change
+                    for rate in rates:
+                        symbol = self.api_client.format_symbol(rate['instId'])
+                        current_pct = self.api_client.format_percentage(float(rate['currentRate']))
+                        previous_pct = self.api_client.format_percentage(self.api_client.get_previous_rate(rate))
+                        
+                        embed.add_field(
+                            name=symbol,
+                            value=f"Now: {current_pct}\nWas: {previous_pct}",
+                            inline=True
+                        )
+                
+                elif mode == 'improving':
+                    # Improving negative rates - shorts closing
+                    embed = discord.Embed(
+                        title="🟡 Improving Negative",
+                        description="Still negative but getting better",
+                        color=discord.Color.orange(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Show rate with improvement indicator
+                    for rate in rates:
+                        symbol = self.api_client.format_symbol(rate['instId'])
+                        current_pct = self.api_client.format_percentage(float(rate['currentRate']))
+                        change_pct = self.api_client.format_percentage(self.api_client.get_rate_change(rate))
+                        
+                        embed.add_field(
+                            name=symbol,
+                            value=f"{current_pct}\n↗️ +{change_pct}",
+                            inline=True
+                        )
+                
+                elif mode == 'worsening':
+                    # Worsening negative rates - shorts building
+                    embed = discord.Embed(
+                        title="🟠 Worsening Negative",
+                        description="Getting more negative - shorts building",
+                        color=discord.Color.dark_red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Show rate with deterioration indicator
+                    for rate in rates:
+                        symbol = self.api_client.format_symbol(rate['instId'])
+                        current_pct = self.api_client.format_percentage(float(rate['currentRate']))
+                        change_pct = self.api_client.format_percentage(self.api_client.get_rate_change(rate))
+                        
+                        embed.add_field(
+                            name=symbol,
+                            value=f"{current_pct}\n↘️ {change_pct}",
+                            inline=True
+                        )
+                    
+                # Add footer with data source info
+                embed.set_footer(text="Data from BloFin • Updates every 30 minutes")
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.followup.send("❌ Failed to fetch funding rates")
+                    
         except Exception as e:
             logger.error(f"Error in funding command: {e}")
-            embed = await self.create_error_embed(
-                "Command Error",
-                "An error occurred while processing the funding rates."
-            )
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send("❌ An error occurred")
     
     @app_commands.command(name="volatility", description="Track price volatility and top movers")
     @app_commands.describe(
@@ -209,11 +385,26 @@ class CryptoCommands(SlashCommandBase):
                                 timeframe: str = "1h",
                                 limit: Optional[int] = 10,
                                 symbol: Optional[str] = None):
-        """Get volatility information"""
+        """
+        Get volatility information to identify coins with significant price movements
+        
+        Volatility tracking helps identify:
+        - Potential breakout opportunities
+        - High-momentum trades
+        - Market manipulation or news-driven moves
+        
+        Args:
+            interaction: Discord interaction object
+            mode: Type of analysis (scanner, movers, check)
+            timeframe: Time period to analyze (5m, 15m, 1h, 4h, 24h)
+            limit: Number of results to show
+            symbol: Specific symbol to check (only for 'check' mode)
+        """
         logger.info(f"Volatility command invoked - mode: {mode}, timeframe: {timeframe}, limit: {limit}, symbol: {symbol}")
         await interaction.response.defer()
         
         try:
+            # Check mode: Analyze specific symbol's volatility
             if mode == "check":
                 if not symbol:
                     await interaction.followup.send(
@@ -222,95 +413,109 @@ class CryptoCommands(SlashCommandBase):
                     )
                     return
                 
+                # Normalize symbol
                 symbol = symbol.upper().replace('USDT', '').strip()
                 await self._handle_volatility_check(interaction, symbol, timeframe)
             
+            # Scanner or movers mode: Find volatile coins across the market
             elif mode == "scanner" or mode == "movers":
-                # Use the actual volatility-scanner endpoint with thresholds
-                # Default thresholds for each timeframe
+                # Define volatility thresholds for each timeframe
+                # Shorter timeframes have lower thresholds since price moves are smaller
                 default_thresholds = {
-                    '5m': 2,
-                    '15m': 3,
-                    '30m': 4,
-                    '1h': 5,
-                    '2h': 7,
-                    '3h': 10,
-                    '4h': 12,
-                    '6h': 15,
-                    '12h': 20,
-                    '24h': 25,
-                    '48h': 30
+                    '5m': 2,      # 2% in 5 minutes is significant
+                    '15m': 3,     # 3% in 15 minutes
+                    '30m': 4,     # 4% in 30 minutes
+                    '1h': 5,      # 5% in 1 hour
+                    '2h': 7,      # 7% in 2 hours
+                    '3h': 10,     # 10% in 3 hours
+                    '4h': 12,     # 12% in 4 hours
+                    '6h': 15,     # 15% in 6 hours
+                    '12h': 20,    # 20% in 12 hours
+                    '24h': 25,    # 25% in 24 hours
+                    '48h': 30     # 30% in 48 hours
                 }
                 
-                # Get threshold for selected timeframe
-                threshold = default_thresholds.get(timeframe, 5)
-                url = f"{self.api_base_url}/volatility-scanner?{timeframe}={threshold}"
-                logger.info(f"Fetching volatility data from: {url}")
-                
-                data = await self.fetch_json(url)
-                logger.info(f"Received data - success: {data.get('success') if data else 'None'}")
-                
-                if not data or not data.get('success'):
-                    await interaction.followup.send("❌ Failed to fetch volatility data")
+                # Check if volatility feature is enabled for this guild
+                volatility_enabled = await self.bot.db.get_setting(interaction.guild_id, 'volatility_enabled')
+                if volatility_enabled is False:
+                    # If explicitly disabled, notify user
+                    await interaction.followup.send(
+                        "⚠️ Volatility tracking is not enabled for this server.\n"
+                        "An admin can enable it with `/setup` commands."
+                    )
                     return
                 
-                # Find the matching threshold data
-                threshold_data = None
-                for t in data.get('thresholds', []):
-                    # Convert hours to timeframe string
-                    hours = t['hours']
-                    if hours < 1:
-                        tf = f"{int(hours * 60)}m"
-                    else:
-                        tf = f"{int(hours)}h"
-                        
-                    if tf == timeframe:
-                        threshold_data = t
-                        break
-                
-                if not threshold_data or not threshold_data.get('coins'):
-                    await interaction.followup.send(f"No coins found with ≥{threshold}% movement in {timeframe}")
-                    return
+                # For custom thresholds per timeframe, we would check database here
+                # Currently using defaults
                 
                 if mode == "scanner":
-                    # Create scanner embed showing summary
+                    # Scanner mode: Show overview across multiple timeframes
+                    scanner_timeframes = {
+                        '5m': 2,
+                        '15m': 3,
+                        '1h': 5,
+                        '4h': 12,
+                        '24h': 25,
+                        '48h': 30
+                    }
+                    
+                    # Get and format data using API client
+                    raw_results = await self.api_client.get_volatility_scanner_multi(scanner_timeframes)
+                    if not raw_results:
+                        await interaction.followup.send("❌ Failed to fetch volatility data")
+                        return
+                    
+                    # Let the API client handle all the formatting
+                    formatted_data = self.api_client.format_volatility_summary(raw_results, scanner_timeframes)
+                    
+                    # Create embed
                     embed = discord.Embed(
-                        title=f"📊 Volatility Scanner - {timeframe}",
-                        description=f"Coins with ≥{threshold}% price movement",
+                        title="📊 Volatility Scanner - All Timeframes",
+                        description="High volatility coins across different periods",
                         color=discord.Color.blue(),
                         timestamp=datetime.utcnow()
                     )
                     
-                    coins = threshold_data['coins']
-                    embed.add_field(
-                        name="Total Coins",
-                        value=f"{len(coins)} coins",
-                        inline=True
-                    )
+                    # Just add the formatted fields
+                    for tf in ['5m', '15m', '1h', '4h', '24h', '48h']:
+                        if tf in formatted_data:
+                            data = formatted_data[tf]
+                            embed.add_field(
+                                name=f"⏱️ {tf} (≥{data['threshold']}%)",
+                                value="\n".join(data['formatted_lines']),
+                                inline=True
+                            )
                     
-                    # Get top 5 movers
-                    sorted_coins = sorted(coins, key=lambda x: abs(float(x['percentChange'])), reverse=True)[:5]
-                    if sorted_coins:
-                        movers_text = []
-                        for i, coin in enumerate(sorted_coins, 1):
-                            percent = float(coin['percentChange'])
-                            emoji = "📈" if percent > 0 else "📉"
-                            movers_text.append(f"{i}. {emoji} **{coin['symbol']}** `{percent:+.1f}%`")
-                        
-                        embed.add_field(
-                            name="Top Movers",
-                            value="\n".join(movers_text),
-                            inline=False
-                        )
-                    
+                    embed.set_footer(text="Use /volatility movers for detailed view of specific timeframe")
                     await interaction.followup.send(embed=embed)
                     
                 else:  # mode == "movers"
-                    # Create detailed movers list
-                    coins = sorted(threshold_data['coins'], 
-                                 key=lambda x: abs(float(x['percentChange'])), 
-                                 reverse=True)[:limit]
+                    # Movers mode: Detailed list for specific timeframe
+                    threshold = default_thresholds.get(timeframe, 5)
                     
+                    # Get raw data
+                    data = await self.api_client.get_volatility_scanner(timeframe, threshold)
+                    if not data or not data.get('success'):
+                        await interaction.followup.send("❌ Failed to fetch volatility data")
+                        return
+                    
+                    # Find matching timeframe data
+                    threshold_data = None
+                    for t in data.get('thresholds', []):
+                        hours = t.get('hours', 0)
+                        tf = f"{int(hours * 60)}m" if hours < 1 else f"{int(hours)}h"
+                        if tf == timeframe:
+                            threshold_data = t
+                            break
+                    
+                    if not threshold_data or not threshold_data.get('coins'):
+                        await interaction.followup.send(f"No coins found with ≥{threshold}% movement in {timeframe}")
+                        return
+                    
+                    # Let API client handle formatting
+                    formatted_coins = self.api_client.format_detailed_movers(threshold_data['coins'], limit)
+                    
+                    # Create embed
                     embed = discord.Embed(
                         title=f"💹 Top Movers - {timeframe}",
                         description=f"Most volatile symbols (≥{threshold}% movement)",
@@ -318,19 +523,15 @@ class CryptoCommands(SlashCommandBase):
                         timestamp=datetime.utcnow()
                     )
                     
-                    if coins:
-                        for coin in coins:
-                            percent = float(coin['percentChange'])
-                            emoji = "📈" if percent > 0 else "📉"
-                            color_indicator = "🟢" if percent > 0 else "🔴"
-                            
-                            embed.add_field(
-                                name=f"{emoji} {coin['symbol']}",
-                                value=f"{color_indicator} {percent:.2f}%\n"
-                                      f"${float(coin['currentPrice']):.4f}",
-                                inline=True
-                            )
-                    else:
+                    # Add formatted fields
+                    for coin_data in formatted_coins:
+                        embed.add_field(
+                            name=f"{coin_data['chart_emoji']} {coin_data['symbol']}",
+                            value=f"{coin_data['action_emoji']} {coin_data['percent_str']}\n{coin_data['price_str']}",
+                            inline=True
+                        )
+                    
+                    if not formatted_coins:
                         embed.description = "No significant movers found"
                     
                     await interaction.followup.send(embed=embed)
@@ -339,207 +540,46 @@ class CryptoCommands(SlashCommandBase):
             logger.error(f"Error in volatility command: {e}")
             await interaction.followup.send("❌ An error occurred while fetching volatility data")
     
-    # Helper methods for creating embeds
-    def _create_scanner_embed(self, data: Dict[str, Any]) -> discord.Embed:
-        """Create scanner summary embed"""
-        embed = discord.Embed(
-            title="📊 BloFin Funding Rate Scanner",
-            color=discord.Color.blue(),
-            timestamp=datetime.utcnow()
-        )
-        
-        # Add summary fields
-        if 'summary' in data:
-            summary = data['summary']
-            embed.add_field(
-                name="Negative Funding",
-                value=f"{summary.get('negativeCount', 0)} coins",
-                inline=True
-            )
-            embed.add_field(
-                name="Most Negative",
-                value=f"{summary.get('mostNegative', 'N/A')}",
-                inline=True
-            )
-            embed.add_field(
-                name="Avg Negative Rate",
-                value=f"{summary.get('avgNegativeRate', 0):.3f}%",
-                inline=True
-            )
-        
-        # Add trends
-        if 'recentTrends' in data:
-            trends = data['recentTrends']
-            trend_text = []
-            if trends.get('improving'):
-                trend_text.append(f"📈 {len(trends['improving'])} improving")
-            if trends.get('worsening'):
-                trend_text.append(f"📉 {len(trends['worsening'])} worsening")
-            if trends.get('turnedPositive'):
-                trend_text.append(f"✅ {len(trends['turnedPositive'])} turned positive")
-            
-            if trend_text:
-                embed.add_field(
-                    name="Recent Trends",
-                    value="\n".join(trend_text),
-                    inline=False
-                )
-        
-        return embed
-    
-    def _create_single_funding_embed(self, symbol: str, data: Dict[str, Any], config: Dict[str, Any]) -> discord.Embed:
-        """Create embed for single symbol funding check"""
-        if 'error' in data:
-            return discord.Embed(
-                title=f"❌ {symbol} Not Found",
-                description=data['error'],
-                color=discord.Color.red()
-            )
-        
-        rate = data.get('fundingRate', 0) * 100  # Convert to percentage
-        color = discord.Color.red() if rate < 0 else discord.Color.green()
-        
-        embed = discord.Embed(
-            title=f"{self.get_funding_emoji(rate)} {symbol} Funding Rate",
-            color=color
-        )
-        
-        embed.add_field(name="Current Rate", value=f"{rate:.4f}%", inline=True)
-        embed.add_field(name="Interval", value="8 hours", inline=True)
-        
-        # Add annualized rate
-        annualized = rate * 3 * 365  # 3 times per day
-        embed.add_field(
-            name="Annualized",
-            value=f"{annualized:.2f}%",
-            inline=True
-        )
-        
-        return embed
-    
-    def _create_funding_list_embed(self, data: Dict[str, Any], config: Dict[str, Any], limit: int) -> discord.Embed:
-        """Create embed for funding rate lists"""
-        rates = data.get('rates', [])
-        
-        if not rates:
-            return discord.Embed(
-                title=config['title'],
-                description=config['empty_message'],
-                color=config['color']
-            )
-        
-        embed = discord.Embed(
-            title=config['title'],
-            description=config['description'].format(limit=min(len(rates), limit)),
-            color=config['color'],
-            timestamp=datetime.utcnow()
-        )
-        
-        # Format the list
-        lines = format_funding_list(rates, limit)
-        
-        # Join lines and add to embed
-        if lines:
-            embed.add_field(
-                name="Current Rates",
-                value="\n".join(lines),
-                inline=False
-            )
-        
-        return embed
-    
-    def _create_volatility_scanner_embed(self, data: Dict[str, Any], timeframe: str) -> discord.Embed:
-        """Create volatility scanner summary embed"""
-        embed = discord.Embed(
-            title=f"📊 Volatility Scanner - {timeframe}",
-            color=discord.Color.blue(),
-            timestamp=datetime.utcnow()
-        )
-        
-        if 'summary' in data:
-            summary = data['summary']
-            embed.add_field(
-                name="Average Volatility",
-                value=f"{summary.get('avgVolatility', 0):.2f}%",
-                inline=True
-            )
-            embed.add_field(
-                name="Highest Volatility",
-                value=f"{summary.get('maxVolatility', 0):.2f}%",
-                inline=True
-            )
-            embed.add_field(
-                name="Active Symbols",
-                value=f"{summary.get('totalSymbols', 0)}",
-                inline=True
-            )
-        
-        if 'topMovers' in data and data['topMovers']:
-            top_5 = data['topMovers'][:5]
-            movers_text = []
-            for i, mover in enumerate(top_5, 1):
-                symbol = mover['symbol']
-                change = mover['priceChangePercent']
-                emoji = "📈" if change > 0 else "📉"
-                movers_text.append(f"{i}. {emoji} **{symbol}** `{change:+.1f}%`")
-            
-            embed.add_field(
-                name="Top Movers",
-                value="\n".join(movers_text),
-                inline=False
-            )
-        
-        return embed
-    
-    def _create_movers_embed(self, movers: List[Dict[str, Any]], timeframe: str, limit: int) -> discord.Embed:
-        """Create embed for top movers"""
-        embed = discord.Embed(
-            title=f"💹 Top Movers - {timeframe}",
-            description=f"Most volatile symbols by price movement",
-            color=discord.Color.blue(),
-            timestamp=datetime.utcnow()
-        )
-        
-        if not movers:
-            embed.description = "No significant movers found"
-            return embed
-        
-        # Format movers list
-        lines = format_volatility_list(movers, limit)
-        
-        if lines:
-            embed.add_field(
-                name=f"Top {len(lines)} Movers",
-                value="\n".join(lines),
-                inline=False
-            )
-        
-        return embed
-    
     async def _handle_volatility_check(self, interaction: discord.Interaction, symbol: str, timeframe: str):
-        """Handle checking volatility for a specific symbol"""
-        url = f"{self.api_base_url}/api/volatility-scanner/symbol/{symbol}?timeframe={timeframe}"
-        data = await self.fetch_json(url)
+        """
+        Handle checking volatility for a specific symbol
+        
+        This is a helper method for the volatility command when checking
+        a specific symbol rather than scanning the market.
+        
+        Args:
+            interaction: Discord interaction object
+            symbol: Cryptocurrency symbol to check
+            timeframe: Time period for volatility analysis
+        """
+        # Query symbol-specific volatility using API client
+        data = await self.api_client.get_symbol_volatility(symbol, timeframe)
         
         if not data or 'error' in data:
             await interaction.followup.send(f"❌ No volatility data found for **{symbol}**")
             return
         
+        # Create embed with volatility metrics
         embed = discord.Embed(
             title=f"📊 {symbol} Volatility - {timeframe}",
             color=discord.Color.blue()
         )
         
+        # Display volatility percentage (standard deviation based)
         embed.add_field(
             name="Volatility",
             value=f"{data.get('volatility', 0):.2f}%",
             inline=True
         )
+        
+        # Display price change percentage
         embed.add_field(
             name="Price Change",
             value=f"{data.get('priceChangePercent', 0):+.2f}%",
             inline=True
         )
+        
+        # Display high/low range as percentage
         embed.add_field(
             name="High/Low Range",
             value=f"{data.get('range', 0):.2f}%",
@@ -549,4 +589,10 @@ class CryptoCommands(SlashCommandBase):
         await interaction.followup.send(embed=embed)
 
 async def setup(bot):
+    """
+    Setup function called by Discord.py to load this cog
+    
+    Args:
+        bot: The Discord bot instance
+    """
     await bot.add_cog(CryptoCommands(bot))

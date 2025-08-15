@@ -14,7 +14,7 @@ class TimezoneCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        self.channels = config.get("timezone_channels", config.get("channels", []))
+        # Don't use config channels anymore - will get from database
         self.update_timezone_channels.start()
     
     def cog_unload(self):
@@ -47,65 +47,99 @@ class TimezoneCog(commands.Cog):
         
         return f"{city_name} {hour}:{minute_str}{period}"
     
-    @tasks.loop(seconds=60)  # Check every minute
+    @tasks.loop(minutes=5)  # Run every 5 minutes
     async def update_timezone_channels(self):
         """Update timezone channel names at 5-minute marks"""
         try:
-            # Only run at 5-minute marks
-            now = datetime.now()
-            if now.minute % 5 != 0:
-                return
-                
             # Add a small delay to ensure we're past the exact minute mark
-            if now.second < 2:
-                await asyncio.sleep(2)
+            await asyncio.sleep(2)
             
-            logger.info("Updating timezone channels...")
+            logger.info("Starting timezone channel updates...")
             updates_made = 0
+            updates_attempted = 0
             
-            for entry in self.channels:
-                tz_name = entry["timezone"]
-                channel_id = entry["channel_id"]
-                channel = self.bot.get_channel(channel_id)
+            # Collect all channels to update across all guilds
+            all_channels_to_update = []
+            
+            for guild in self.bot.guilds:
+                # Check if timezone feature is enabled
+                enabled = await self.bot.db.get_setting(guild.id, 'timezone_enabled')
+                if not enabled:
+                    continue
                 
-                if channel:
-                    try:
-                        new_name = self.format_time(tz_name)
-                        current_name = channel.name
-                        logger.debug(f"{tz_name}: Current='{current_name}', Expected='{new_name}'")
+                # Get timezone channels from database using raw SQL
+                async with self.bot.db.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        await cursor.execute("""
+                            SELECT channel_id, timezone, display_name
+                            FROM timezone_channels
+                            WHERE guild_id = %s
+                        """, (guild.id,))
                         
-                        # Only update if the name is different
-                        if channel.name != new_name:
-                            await channel.edit(name=new_name)
-                            logger.info(f"Updated {tz_name} → {new_name}")
-                            updates_made += 1
-                        else:
-                            logger.debug(f"{tz_name} already showing {new_name}, skipping update")
-                    except discord.errors.HTTPException as e:
-                        if e.status == 429:  # Rate limited
-                            logger.warning(f"Rate limited updating {tz_name}, will retry next cycle")
-                        else:
-                            logger.error(f"HTTP error updating {tz_name}: {e}", exc_info=True)
-                    except Exception as e:
-                        logger.error(f"Unexpected error updating {tz_name}: {e}", exc_info=True)
-                else:
-                    logger.error(f"Channel {channel_id} not found for {tz_name}")
+                        channels = await cursor.fetchall()
+                        
+                        for row in channels:
+                            channel_id = row[0]
+                            tz_name = row[1]
+                            channel = self.bot.get_channel(channel_id)
+                            
+                            if channel:
+                                new_name = self.format_time(tz_name)
+                                # Only add to update list if name needs changing
+                                if channel.name != new_name:
+                                    all_channels_to_update.append({
+                                        'channel': channel,
+                                        'new_name': new_name,
+                                        'tz_name': tz_name
+                                    })
+                                else:
+                                    logger.debug(f"{tz_name} already showing {new_name}, skipping")
+                            else:
+                                logger.error(f"Channel {channel_id} not found for {tz_name}")
             
-            if updates_made == 0:
+            # Now update all channels that need updating
+            # Discord allows 2 updates per channel per 10 minutes
+            # Since we run every 5 minutes, each channel will only be updated once per run
+            for update_info in all_channels_to_update:
+                channel = update_info['channel']
+                new_name = update_info['new_name']
+                tz_name = update_info['tz_name']
+                
+                try:
+                    updates_attempted += 1
+                    await channel.edit(name=new_name)
+                    logger.info(f"Updated {tz_name} → {new_name}")
+                    updates_made += 1
+                    
+                    # Small delay to avoid hammering the API
+                    if len(all_channels_to_update) > 10:
+                        await asyncio.sleep(0.5)  # Half second delay for large batches
+                        
+                except discord.errors.HTTPException as e:
+                    if e.status == 429:  # Rate limited
+                        logger.warning(f"Rate limited updating {tz_name}, will retry next cycle")
+                        # Don't break - other channels might still be updateable
+                    else:
+                        logger.error(f"HTTP error updating {tz_name}: {e}", exc_info=True)
+                except Exception as e:
+                    logger.error(f"Unexpected error updating {tz_name}: {e}", exc_info=True)
+            
+            if updates_made > 0:
+                logger.info(f"Updated {updates_made}/{updates_attempted} timezone channels")
+            elif len(all_channels_to_update) == 0:
                 logger.info("All timezone channels already up to date")
+            else:
+                logger.warning(f"Failed to update {updates_attempted} channels - check logs for errors")
+                
         except Exception as e:
             logger.error(f"Critical error in timezone update loop: {e}", exc_info=True)
     
     @update_timezone_channels.before_loop
     async def before_timezone_update(self):
-        """Wait for bot to be ready and do immediate update"""
+        """Wait for bot to be ready and sync to 5-minute marks"""
         await self.bot.wait_until_ready()
         
-        # Do an immediate update first
-        logger.info("Performing immediate timezone update...")
-        await self.update_timezone_channels()
-        
-        # Then wait until next 5-minute mark
+        # Wait until next 5-minute mark for first update
         now = datetime.now()
         minutes_to_wait = 5 - (now.minute % 5)
         if minutes_to_wait == 5:
@@ -113,8 +147,11 @@ class TimezoneCog(commands.Cog):
         seconds_to_wait = minutes_to_wait * 60 - now.second
         
         if seconds_to_wait > 0:
-            logger.info(f"Waiting {seconds_to_wait} seconds until next 5-minute mark...")
+            logger.info(f"Waiting {seconds_to_wait} seconds until next 5-minute mark for first timezone update...")
             await asyncio.sleep(seconds_to_wait)
+        else:
+            # We're exactly on a 5-minute mark, wait a couple seconds to avoid conflicts
+            await asyncio.sleep(2)
 
 async def setup(bot):
     # This function is called by the bot to load the cog

@@ -23,10 +23,7 @@ class SlashCommandBase(commands.Cog):
         # Use API URL from config, fallback to environment variable, then default
         self.api_base_url = self.config.get('api_base_url', 
                                            os.getenv('API_BASE_URL', 'http://app:5173/api'))
-        self.convex_url = self.config.get('convex_url',
-                                         os.getenv('VITE_CONVEX_URL', 'https://qualified-otter-813.convex.cloud'))
         logger.info(f"Using API base URL: {self.api_base_url}")
-        logger.info(f"Using Convex URL: {self.convex_url}")
     
     async def fetch_json(self, url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
         """Fetch JSON data from a URL with error handling"""

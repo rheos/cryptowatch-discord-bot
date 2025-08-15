@@ -23,7 +23,7 @@ from cogs.auto_updates_cog import AutoUpdatesCog
 from cogs.volatility_cog import VolatilityCog
 from cogs.engagement_cog import EngagementCog
 from cogs.ai_chat_cog import AIChatCog
-from cogs.setup_cog import SetupCog
+# from cogs.setup_cog import SetupCog  # Removed - using slash commands only
 # Slash commands imported dynamically in setup_hook
 
 # Set up logging
@@ -107,7 +107,7 @@ class CryptoWatchBot(commands.Bot):
         self.logger.info("Database connected and migrations completed")
         
         # Initialize cogs with config
-        await self.add_cog(SetupCog(self, self.config))  # Add setup cog first
+        # await self.add_cog(SetupCog(self, self.config))  # Removed - using slash commands only
         await self.add_cog(TimezoneCog(self, self.config))
         await self.add_cog(MarketEventsCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
@@ -117,10 +117,12 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(AIChatCog(self, self.config))
         # Load modular slash commands
         from cogs.slash_commands import CryptoCommands, UserCommands
-        from cogs.slash_commands.admin_commands_v2 import AdminCommands
+        from cogs.slash_commands.admin_commands import AdminCommands
+        from cogs.slash_commands.setup_commands import SetupCommands
         await self.add_cog(CryptoCommands(self))
         await self.add_cog(UserCommands(self))
         await self.add_cog(AdminCommands(self))
+        await self.add_cog(SetupCommands(self))
         
         self.logger.info("All cogs loaded successfully")
     
@@ -131,10 +133,13 @@ class CryptoWatchBot(commands.Bot):
         
         # Sync slash commands
         try:
-            # Copy global commands to guild for development
-            # This allows instant updates without waiting for Discord's cache
+            # Clear existing commands first to force full re-sync
+            # This ensures Discord updates its cache with our new autocomplete
             for guild in self.guilds:
                 guild_obj = discord.Object(id=guild.id)
+                
+                # Clear guild commands first
+                self.tree.clear_commands(guild=guild_obj)
                 
                 # Copy all global commands to this guild
                 self.tree.copy_global_to(guild=guild_obj)

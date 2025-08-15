@@ -58,28 +58,32 @@ class MarketEventsCog(commands.Cog):
         for guild in self.bot.guilds:
             try:
                 # Check if market events are enabled for this guild
-                enabled = await self.bot.db.get_setting(guild.id, 'market_events.enabled')
+                enabled = await self.bot.db.get_setting(guild.id, 'market_enabled')
                 logger.debug(f"Market events enabled for {guild.name}: {enabled}")
                 if not enabled:
                     continue
                 
-                # Get configured channels
-                channels = await self.bot.db.get_guild_channels(guild.id)
-                logger.debug(f"Found {len(channels)} channels configured for {guild.name}")
+                # Get configured channel IDs from new schema
+                countdown_channel_id = await self.bot.db.get_setting(guild.id, 'market_countdown')
+                schedule_channel_id = await self.bot.db.get_setting(guild.id, 'market_schedule')
                 
-                # Update countdown channel
+                # Get the actual channel objects
                 market_event_channel = None
                 market_times_channel = None
                 
-                for channel_config in channels:
-                    if channel_config['channel_type'] == 'market_events':
-                        channel_id = channel_config['channel_id']
-                        market_event_channel = guild.get_channel(channel_id)
-                        logger.debug(f"Found market_events channel: {market_event_channel}")
-                    elif channel_config['channel_type'] == 'market_times':
-                        channel_id = channel_config['channel_id']
-                        market_times_channel = guild.get_channel(channel_id)
-                        logger.debug(f"Found market_times channel: {market_times_channel}")
+                if countdown_channel_id:
+                    try:
+                        market_event_channel = guild.get_channel(int(countdown_channel_id))
+                        logger.debug(f"Found market_countdown channel: {market_event_channel}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid countdown channel ID: {countdown_channel_id}")
+                
+                if schedule_channel_id:
+                    try:
+                        market_times_channel = guild.get_channel(int(schedule_channel_id))
+                        logger.debug(f"Found market_schedule channel: {market_times_channel}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid schedule channel ID: {schedule_channel_id}")
                 
                 # Update countdown channel name
                 if market_event_channel:
@@ -408,8 +412,8 @@ class MarketEventsCog(commands.Cog):
     
     async def get_or_create_message(self, guild_id: int, channel: discord.TextChannel):
         """Get existing message or create new one"""
-        # Try to get stored message ID - ALWAYS fetch fresh from DB
-        message_id_str = await self.bot.db.get_setting(guild_id, 'market_events.pinned_message_id')
+        # Try to get stored message ID from new schema
+        message_id_str = await self.bot.db.get_setting(guild_id, 'market_schedule_message_id')
         logger.info(f"Retrieved stored message ID from database: '{message_id_str}' (type: {type(message_id_str)}) for guild {guild_id}")
         
         if message_id_str and message_id_str != '':  # Check for empty string too
@@ -438,7 +442,7 @@ class MarketEventsCog(commands.Cog):
             logger.warning(f"Could not pin market times message in {channel.name}")
         
         # Store the new message ID - this should overwrite any old value
-        await self.bot.db.set_setting(guild_id, 'market_events.pinned_message_id', str(message.id))
+        await self.bot.db.set_setting(guild_id, 'market_schedule_message_id', str(message.id))
         logger.info(f"Stored new message ID: {message.id}")
         
         # Force a small delay to ensure database write completes

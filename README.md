@@ -2,6 +2,13 @@
 
 A comprehensive Discord bot for crypto trading communities that provides timezone displays, market event tracking, funding rate alerts, volatility tracking, and community engagement management.
 
+## IMPORTANT: Environment Notes
+- **Development**: Uses Docker containers (docker-compose)
+- **Production**: Runs directly on AWS EC2 instance (NO Docker)
+- **Database**: MySQL (`cryptowatchtools` database)
+  - Dev: Runs in Docker container
+  - Prod: AWS RDS instance
+
 ## Features
 
 ### 🕐 Timezone Display
