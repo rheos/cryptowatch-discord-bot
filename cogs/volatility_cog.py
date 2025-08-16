@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime
 import logging
 from typing import Dict, List, Optional
+from utils.message_cleanup import cleanup_before_send
 
 logger = logging.getLogger('discord-bot.volatility')
 
@@ -363,6 +364,17 @@ class VolatilityCog(commands.Cog):
             embed.set_footer(text="Price movements exceeding configured thresholds")
             
             await channel.send(embed=embed)
+            
+            # Clean up old messages after sending new alert
+            try:
+                logger.debug(f"Starting cleanup of messages older than 4 hours in #{channel.name}")
+                deleted = await cleanup_before_send(channel, max_age_hours=4, bot_id=self.bot.user.id)
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} old volatility alert messages")
+                else:
+                    logger.debug("No old volatility messages to clean up")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup old messages: {e}")
             
             # Track sent alerts - update to the longest timeframe
             for alert in alerts[:5]:

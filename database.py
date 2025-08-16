@@ -328,29 +328,30 @@ class BotDatabase:
         settings = {}
         
         # Get all engagement settings
+        # Note: engagement_enabled is in Features section, others are in Engagement section
         engagement_keys = [
-            'engagement.enabled',
-            'engagement.messages_threshold',
-            'engagement.days_threshold',
-            'engagement.warning_days',
-            'engagement.warning_min_messages',
-            'engagement.dm_warnings'
+            'engagement_enabled',  # In Features section (enables/disables the feature)
+            'messages_threshold',  # In Engagement section
+            'days_threshold',      # In Engagement section
+            'warning_days',        # In Engagement section
+            'warning_min_messages', # In Engagement section
+            'dm_warnings'          # In Engagement section
         ]
         
         for key in engagement_keys:
             value = await self.get_setting(guild_id, key)
             # Map to old field names for compatibility
-            if key == 'engagement.enabled':
+            if key == 'engagement_enabled':
                 settings['enabled'] = value
-            elif key == 'engagement.messages_threshold':
+            elif key == 'messages_threshold':
                 settings['active_messages_threshold'] = value
-            elif key == 'engagement.days_threshold':
+            elif key == 'days_threshold':
                 settings['active_days_threshold'] = value
-            elif key == 'engagement.warning_days':
+            elif key == 'warning_days':
                 settings['warning_days_before'] = value
-            elif key == 'engagement.warning_min_messages':
+            elif key == 'warning_min_messages':
                 settings['warning_min_messages'] = value
-            elif key == 'engagement.dm_warnings':
+            elif key == 'dm_warnings':
                 settings['dm_warnings_enabled'] = value
         
         return settings
@@ -359,12 +360,12 @@ class BotDatabase:
         """Update engagement settings (compatibility method)"""
         # Map old field names to new setting keys
         field_mapping = {
-            'enabled': 'engagement.enabled',
-            'active_messages_threshold': 'engagement.messages_threshold',
-            'active_days_threshold': 'engagement.days_threshold',
-            'warning_days_before': 'engagement.warning_days',
-            'warning_min_messages': 'engagement.warning_min_messages',
-            'dm_warnings_enabled': 'engagement.dm_warnings'
+            'enabled': 'engagement_enabled',
+            'active_messages_threshold': 'messages_threshold',
+            'active_days_threshold': 'days_threshold',
+            'warning_days_before': 'warning_days',
+            'warning_min_messages': 'warning_min_messages',
+            'dm_warnings_enabled': 'dm_warnings'
         }
         
         for old_field, value in kwargs.items():

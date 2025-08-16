@@ -237,18 +237,45 @@ class CryptoAPI:
     
     async def get_symbol_volatility(self, symbol: str, timeframe: str = '1h') -> Optional[Dict[str, Any]]:
         """
-        Get volatility data for a specific symbol
+        Get volatility data for a specific symbol by searching scanner results
         
         Args:
             symbol: Cryptocurrency symbol
             timeframe: Time period for analysis
             
         Returns:
-            Volatility metrics dictionary
+            Volatility metrics dictionary with found coin data or None
         """
         symbol = symbol.upper().replace('USDT', '').strip()
-        url = f"{self.api_base_url}/volatility-scanner/symbol/{symbol}?timeframe={timeframe}"
-        return await self.fetch_json(url)
+        
+        # Get scanner data with low threshold to catch most coins
+        threshold = 0.1  # 0.1% to catch almost everything
+        data = await self.get_volatility_scanner(timeframe, threshold)
+        
+        if not data or not data.get('success'):
+            return None
+        
+        # Search for the symbol in the results
+        for t in data.get('thresholds', []):
+            hours = t.get('hours', 0)
+            tf = f"{int(hours * 60)}m" if hours < 1 else f"{int(hours)}h"
+            
+            if tf == timeframe:
+                for coin in t.get('coins', []):
+                    coin_symbol = coin['symbol'].upper().replace('USDT', '').replace('-USDT', '')
+                    if coin_symbol == symbol:
+                        # Return formatted data
+                        return {
+                            'symbol': symbol,
+                            'percentChange': float(coin['percentChange']),
+                            'currentPrice': float(coin['currentPrice']),
+                            'startPrice': float(coin.get('startPrice', coin['currentPrice'])),
+                            'found': True
+                        }
+                break
+        
+        # Symbol not found in volatile coins
+        return {'symbol': symbol, 'found': False}
     
     # ========== Utility Methods ==========
     

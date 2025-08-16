@@ -20,8 +20,8 @@ class EngagementCog(commands.Cog):
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
         
-        # Check if engagement is enabled
-        self.enabled = self.config.get('engagement', {}).get('enabled', False)
+        # Note: enabled status is checked from database in each event handler
+        # Not cached here since it can be changed at runtime
         
         # Role names from config
         engagement_config = self.config.get('engagement', {})
@@ -69,13 +69,10 @@ class EngagementCog(commands.Cog):
         # Cache for warnings sent (to avoid spamming)
         self.warnings_sent = defaultdict(lambda: None)
         
-        # Start background tasks only if enabled
-        if self.enabled:
-            self.check_activity.start()
-            self.flush_message_buffer.start()
-            self.logger.info("EngagementCog initialized and enabled")
-        else:
-            self.logger.info("EngagementCog initialized but disabled")
+        # Start background tasks (they will check database for enabled status)
+        self.check_activity.start()
+        self.flush_message_buffer.start()
+        self.logger.info("EngagementCog initialized")
     
     def cog_unload(self):
         self.check_activity.cancel()
@@ -140,8 +137,8 @@ class EngagementCog(commands.Cog):
     @tasks.loop(hours=24)
     async def check_activity(self):
         """Daily check for member activity and role updates"""
-        if not self.enabled:
-            return
+        # Check if engagement is enabled in any guild
+        # This task runs for all guilds the bot is in
             
         try:
             for guild in self.bot.guilds:

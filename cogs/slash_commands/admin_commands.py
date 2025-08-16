@@ -30,6 +30,7 @@ class AdminCommands(SlashCommandBase):
         app_commands.Choice(name="Remove Role from Member", value="remove_role"),
         app_commands.Choice(name="Check Member Stats", value="check_member"),
         app_commands.Choice(name="Refresh All Stats", value="refresh"),
+        app_commands.Choice(name="Backfill Engagement Data", value="backfill"),
     ])
     @app_commands.default_permissions(administrator=True)
     async def admin_command(self, interaction: discord.Interaction,
@@ -64,6 +65,8 @@ class AdminCommands(SlashCommandBase):
                 await self._handle_check_member(interaction, member)
             elif action == "refresh":
                 await self._handle_refresh_stats(interaction)
+            elif action == "backfill":
+                await self._handle_backfill(interaction)
                 
         except Exception as e:
             logger.error(f"Error in admin command: {e}")
@@ -251,6 +254,78 @@ class AdminCommands(SlashCommandBase):
             await msg.edit(embed=embed)
         else:
             await msg.edit(content="❌ Engagement cog not found")
+    
+    async def _handle_backfill(self, interaction: discord.Interaction):
+        """Handle engagement data backfill with progress reporting"""
+        import asyncio
+        import os
+        
+        # Check if engagement is enabled in config
+        if not self.bot.config.get('engagement', {}).get('enabled'):
+            await interaction.followup.send(
+                "❌ Engagement is not enabled in the bot configuration"
+            )
+            return
+        
+        embed = discord.Embed(
+            title="🔄 Starting Engagement Backfill",
+            description="Initializing...",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed)
+        msg = await interaction.original_response()
+        
+        try:
+            # Run the backfill script
+            script_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "scripts", "backfill_engagement.py"
+            )
+            
+            process = await asyncio.create_subprocess_exec(
+                "python3", script_path,
+                "--guild", str(interaction.guild.id),
+                "--days", "30",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            # Read progress updates
+            last_update = ""
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                    
+                text = line.decode().strip()
+                # Update on channel progress lines
+                if "Scanning channel" in text or "Guild scan complete" in text:
+                    last_update = text.split("INFO - ")[-1] if "INFO - " in text else text
+                    embed.description = last_update
+                    await msg.edit(embed=embed)
+            
+            # Wait for completion
+            await process.wait()
+            
+            if process.returncode == 0:
+                embed.title = "✅ Backfill Complete"
+                embed.description = "Successfully backfilled engagement data"
+                embed.color = discord.Color.green()
+            else:
+                stderr_data = await process.stderr.read()
+                error = stderr_data.decode() if stderr_data else "Unknown error"
+                embed.title = "❌ Backfill Failed"
+                embed.description = f"Error: {error[:200]}"
+                embed.color = discord.Color.red()
+            
+            await msg.edit(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error during backfill: {e}")
+            embed.title = "❌ Error"
+            embed.description = str(e)
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
     
     @app_commands.command(name="purge", description="Delete multiple messages from the current channel")
     @app_commands.describe(

@@ -6,6 +6,7 @@ from discord.ext import commands, tasks
 import aiohttp
 from datetime import datetime, timedelta
 import logging
+from utils.message_cleanup import cleanup_before_send, find_last_bot_message
 
 logger = logging.getLogger('discord-bot.auto-updates')
 
@@ -154,9 +155,26 @@ class AutoUpdatesCog(commands.Cog):
                                     inline=False
                                 )
                     
-                    embed.set_footer(text="Use !negative for detailed rates")
-                    await channel.send(embed=embed)
-                    logger.info(f"Posted funding summary - latest data from {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
+                    embed.set_footer(text="Use /funding for detailed rates")
+                    
+                    # Try to find and edit the last funding summary message
+                    logger.debug(f"Looking for last funding summary message in #{channel.name}")
+                    last_message = await find_last_bot_message(
+                        channel,
+                        self.bot.user.id,
+                        embed_check="Funding Rate Summary",
+                        max_age_hours=None  # No age limit - keep editing the same message indefinitely
+                    )
+                    
+                    if last_message:
+                        # Edit the existing message
+                        await last_message.edit(embed=embed)
+                        message_age = (datetime.utcnow() - last_message.created_at.replace(tzinfo=None)).total_seconds() / 3600
+                        logger.info(f"Updated existing funding summary (message age: {message_age:.1f}h) - latest data from {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
+                    else:
+                        # No existing message or too old, create new one
+                        await channel.send(embed=embed)
+                        logger.info(f"Posted new funding summary (no recent message found) - latest data from {datetime.fromtimestamp(latest_funding_time/1000)} UTC")
                     
         except Exception as e:
             logger.error(f"Error in funding summary update: {e}")
@@ -215,6 +233,17 @@ class AutoUpdatesCog(commands.Cog):
                             self.last_alert_symbols = extreme_symbols
                             self.last_alert_time = now
                             logger.info(f"Sent extreme funding alert for: {', '.join(extreme_symbols)}")
+                            
+                            # Clean up old messages after sending new alert
+                            try:
+                                logger.debug(f"Starting cleanup of messages older than 4 hours in #{channel.name}")
+                                deleted = await cleanup_before_send(channel, max_age_hours=4, bot_id=self.bot.user.id)
+                                if deleted > 0:
+                                    logger.info(f"Cleaned up {deleted} old alert messages")
+                                else:
+                                    logger.debug("No old messages to clean up")
+                            except Exception as e:
+                                logger.warning(f"Failed to cleanup old messages: {e}")
                         else:
                             logger.debug("Skipping extreme alert - no new symbols")
             
@@ -266,6 +295,17 @@ class AutoUpdatesCog(commands.Cog):
                             self.recent_flip_alerts[symbol] = (change, current_time)
                         
                         await channel.send(embed=embed)
+                        
+                        # Clean up old messages after sending new alert
+                        try:
+                            logger.debug(f"Starting cleanup of messages older than 4 hours in #{channel.name}")
+                            deleted = await cleanup_before_send(channel, max_age_hours=4, bot_id=self.bot.user.id)
+                            if deleted > 0:
+                                logger.info(f"Cleaned up {deleted} old alert messages")
+                            else:
+                                logger.debug("No old messages to clean up")
+                        except Exception as e:
+                            logger.warning(f"Failed to cleanup old messages: {e}")
                         
                         # Clean up old alerts (older than 2 hours)
                         cutoff_time = current_time - timedelta(hours=2)

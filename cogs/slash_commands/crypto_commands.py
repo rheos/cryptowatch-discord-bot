@@ -15,6 +15,7 @@ from utils.crypto_api import CryptoAPI
 import aiohttp
 
 logger = logging.getLogger('discord-bot.crypto_commands')
+logger.setLevel(logging.DEBUG)
 
 # Configuration for each funding mode - defines display properties for each funding analysis type
 # This config is used to customize embed titles, colors, and messages for different modes
@@ -364,7 +365,8 @@ class CryptoCommands(SlashCommandBase):
     @app_commands.describe(
         mode="Type of volatility analysis",
         timeframe="Time period for analysis",
-        limit="Number of results to show"
+        limit="Number of results to show",
+        symbol="Symbol to check (only for 'Check Specific Symbol' mode)"
     )
     @app_commands.choices(
         mode=[
@@ -401,6 +403,8 @@ class CryptoCommands(SlashCommandBase):
             symbol: Specific symbol to check (only for 'check' mode)
         """
         logger.info(f"Volatility command invoked - mode: {mode}, timeframe: {timeframe}, limit: {limit}, symbol: {symbol}")
+        # Debug: Log all interaction data options
+        logger.debug(f"Interaction data: {interaction.data}")
         await interaction.response.defer()
         
         try:
@@ -435,18 +439,9 @@ class CryptoCommands(SlashCommandBase):
                     '48h': 30     # 30% in 48 hours
                 }
                 
-                # Check if volatility feature is enabled for this guild
-                volatility_enabled = await self.bot.db.get_setting(interaction.guild_id, 'volatility_enabled')
-                if volatility_enabled is False:
-                    # If explicitly disabled, notify user
-                    await interaction.followup.send(
-                        "⚠️ Volatility tracking is not enabled for this server.\n"
-                        "An admin can enable it with `/setup` commands."
-                    )
-                    return
-                
-                # For custom thresholds per timeframe, we would check database here
-                # Currently using defaults
+                # Volatility scanning is a read-only feature, no need to restrict it
+                # In the future, we could check for custom thresholds here
+                # volatility_enabled check removed - feature available to all guilds by default
                 
                 if mode == "scanner":
                     # Scanner mode: Show overview across multiple timeframes
@@ -542,47 +537,65 @@ class CryptoCommands(SlashCommandBase):
     
     async def _handle_volatility_check(self, interaction: discord.Interaction, symbol: str, timeframe: str):
         """
-        Handle checking volatility for a specific symbol
-        
-        This is a helper method for the volatility command when checking
-        a specific symbol rather than scanning the market.
-        
-        Args:
-            interaction: Discord interaction object
-            symbol: Cryptocurrency symbol to check
-            timeframe: Time period for volatility analysis
+        Handle checking volatility for a specific symbol (DRY - delegates to API client)
         """
-        # Query symbol-specific volatility using API client
+        # Use API client to get symbol volatility
         data = await self.api_client.get_symbol_volatility(symbol, timeframe)
         
-        if not data or 'error' in data:
-            await interaction.followup.send(f"❌ No volatility data found for **{symbol}**")
+        if not data:
+            await interaction.followup.send(f"❌ Failed to fetch volatility data")
             return
         
-        # Create embed with volatility metrics
+        if not data.get('found'):
+            # Symbol not volatile enough, try to show price data
+            price_data = await self.api_client.get_symbol_price(symbol)
+            if price_data:
+                embed = discord.Embed(
+                    title=f"📊 {symbol.upper()} - {timeframe}",
+                    description=f"No significant volatility in {timeframe}",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="Current Price",
+                    value=f"${price_data.get('price', 0):.4f}",
+                    inline=True
+                )
+                embed.add_field(
+                    name="24h Change",
+                    value=f"{price_data.get('priceChangePercent', 0):+.2f}%",
+                    inline=True
+                )
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.followup.send(f"❌ No data found for **{symbol.upper()}**")
+            return
+        
+        # Create embed with volatility data
+        percent_change = data['percentChange']
+        color = discord.Color.green() if percent_change > 0 else discord.Color.red()
+        emoji = "📈" if percent_change > 0 else "📉"
+        
         embed = discord.Embed(
-            title=f"📊 {symbol} Volatility - {timeframe}",
-            color=discord.Color.blue()
+            title=f"{emoji} {data['symbol']} - {timeframe}",
+            color=color,
+            timestamp=datetime.utcnow()
         )
         
-        # Display volatility percentage (standard deviation based)
-        embed.add_field(
-            name="Volatility",
-            value=f"{data.get('volatility', 0):.2f}%",
-            inline=True
-        )
-        
-        # Display price change percentage
         embed.add_field(
             name="Price Change",
-            value=f"{data.get('priceChangePercent', 0):+.2f}%",
+            value=f"{percent_change:+.2f}%",
             inline=True
         )
         
-        # Display high/low range as percentage
         embed.add_field(
-            name="High/Low Range",
-            value=f"{data.get('range', 0):.2f}%",
+            name="Current Price",
+            value=f"${data['currentPrice']:.4f}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Start Price",
+            value=f"${data['startPrice']:.4f}",
             inline=True
         )
         
