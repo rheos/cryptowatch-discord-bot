@@ -260,10 +260,11 @@ class AdminCommands(SlashCommandBase):
         import asyncio
         import os
         
-        # Check if engagement is enabled in config
-        if not self.bot.config.get('engagement', {}).get('enabled'):
+        # Check if engagement is enabled in database settings
+        engagement_enabled = await self.bot.db.get_setting(interaction.guild.id, 'engagement_enabled')
+        if engagement_enabled != 'true':
             await interaction.followup.send(
-                "❌ Engagement is not enabled in the bot configuration"
+                "❌ Engagement tracking is not enabled. Use /setup to enable it first."
             )
             return
         
