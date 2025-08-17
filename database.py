@@ -289,6 +289,11 @@ class BotDatabase:
         """Get statistics for all members in a guild"""
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
+                # Debug: Check what database we're connected to
+                await cursor.execute("SELECT DATABASE()")
+                db_name = await cursor.fetchone()
+                logger.info(f"get_all_member_stats: Querying database '{db_name['DATABASE()']}' for guild {guild_id}")
+                
                 await cursor.execute("""
                     SELECT 
                         user_id,
@@ -302,7 +307,9 @@ class BotDatabase:
                     ORDER BY total_messages DESC
                 """, (guild_id, days))
                 
-                return await cursor.fetchall()
+                results = await cursor.fetchall()
+                logger.info(f"get_all_member_stats: Found {len(results)} members with activity in last {days} days")
+                return results
     
     # Audit Logging
     async def log_action(self, guild_id: int, user_id: int, action: str, 

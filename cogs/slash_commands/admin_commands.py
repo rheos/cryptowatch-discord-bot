@@ -23,7 +23,7 @@ class AdminCommands(SlashCommandBase):
         limit="Number of results to show"
     )
     @app_commands.choices(action=[
-        app_commands.Choice(name="Analyze All Members", value="analyze"),
+        app_commands.Choice(name="Analyze Member Activity", value="analyze"),
         app_commands.Choice(name="Show Active Members", value="active"),
         app_commands.Choice(name="Show Inactive Members", value="inactive"),
         app_commands.Choice(name="Grant Role to Member", value="grant_role"),
@@ -37,7 +37,7 @@ class AdminCommands(SlashCommandBase):
                            action: str,
                            member: Optional[discord.Member] = None,
                            role: Optional[discord.Role] = None,
-                           limit: Optional[int] = 10):
+                           limit: Optional[int] = None):
         """Admin engagement management"""
         await interaction.response.defer(ephemeral=True)
         
@@ -72,7 +72,7 @@ class AdminCommands(SlashCommandBase):
             logger.error(f"Error in admin command: {e}")
             await interaction.followup.send("❌ An error occurred while processing the command")
     
-    async def _handle_analyze_members(self, interaction: discord.Interaction, limit: int):
+    async def _handle_analyze_members(self, interaction: discord.Interaction, limit: Optional[int]):
         """Analyze all members"""
         guild = interaction.guild
         
@@ -86,9 +86,16 @@ class AdminCommands(SlashCommandBase):
         # Sort by total messages
         sorted_stats = sorted(all_stats, key=lambda x: x['total_messages'], reverse=True)
         
+        # Determine how many to show
+        if limit is None:
+            limit = len(sorted_stats)  # Show all if no limit specified
+            description = f"All {len(sorted_stats)} members by 30-day activity"
+        else:
+            description = f"Top {min(limit, len(sorted_stats))} members by 30-day activity"
+        
         embed = discord.Embed(
             title="📊 Member Activity Analysis",
-            description=f"Top {min(limit, len(sorted_stats))} members by 30-day activity",
+            description=description,
             color=discord.Color.blue()
         )
         
@@ -114,7 +121,7 @@ class AdminCommands(SlashCommandBase):
         
         await interaction.followup.send(embed=embed)
     
-    async def _handle_show_active(self, interaction: discord.Interaction, limit: int):
+    async def _handle_show_active(self, interaction: discord.Interaction, limit: Optional[int]):
         """Show active members"""
         guild = interaction.guild
         active_stats = await self.bot.db.get_active_members(guild.id, threshold=10, days=30)
@@ -130,18 +137,20 @@ class AdminCommands(SlashCommandBase):
         )
         
         lines = []
-        for stat in active_stats[:limit]:
+        display_limit = limit if limit else len(active_stats)
+        for stat in active_stats[:display_limit]:
             member = guild.get_member(stat['user_id'])
             if member:
                 lines.append(f"• **{member.display_name}** - {stat['total_messages']} messages")
         
         if lines:
-            embed.add_field(name=f"Top {len(lines)} Active Members", value="\n".join(lines), inline=False)
+            field_name = f"All {len(lines)} Active Members" if limit is None else f"Top {len(lines)} Active Members"
+            embed.add_field(name=field_name, value="\n".join(lines), inline=False)
         
         embed.set_footer(text=f"Total: {len(active_stats)} active members")
         await interaction.followup.send(embed=embed)
     
-    async def _handle_show_inactive(self, interaction: discord.Interaction, limit: int):
+    async def _handle_show_inactive(self, interaction: discord.Interaction, limit: Optional[int]):
         """Show inactive members"""
         guild = interaction.guild
         
