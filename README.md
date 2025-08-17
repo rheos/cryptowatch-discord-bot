@@ -40,7 +40,6 @@ A comprehensive Discord bot for crypto trading communities that provides timezon
   - Scanner - Overview across all timeframes
   - Most Volatile - Top movers for specific timeframe
   - Check Specific Symbol - Check volatility for a specific coin
-- `/watchlist <exchange>` - Export TradingView watchlist for supported exchanges
 
 ### 🔄 Auto Updates
 - Automatically updates designated channels with:
@@ -72,10 +71,6 @@ A comprehensive Discord bot for crypto trading communities that provides timezon
   - `/mystats` - Check your own engagement statistics
   - `/help` - Get help information
 
-### 🤖 AI Assistant
-- `/luna <question>` - Chat with Luna, the crypto-specialized AI assistant
-- Powered by GPT-3.5-turbo with crypto market knowledge
-- Context-aware responses about trading and market analysis
 
 ### ⚙️ Setup & Configuration
 - `/setup` - Initial bot configuration (admin only)
@@ -96,7 +91,6 @@ Required packages:
 - aiohttp
 - aiomysql
 - python-dateutil
-- openai
 
 ### 2. Discord Bot Setup
 
@@ -196,16 +190,27 @@ python main.py
 - `/price <symbol>` - Get cryptocurrency price
 - `/funding <mode> [limit] [symbol]` - Analyze funding rates
 - `/volatility <mode> [timeframe] [limit] [symbol]` - Track volatility
-- `/watchlist <exchange>` - Get TradingView watchlist
 - `/mystats` - Check your engagement statistics
-- `/luna <question>` - Chat with AI assistant
 - `/help` - Get help information
+- `/about` - Learn about CryptoWatch Bot
 
 ### Admin Commands
-- `/setup` - Configure bot settings
 - `/admin <action>` - Administrative functions
-- `/market <action>` - Market event management
-- `/timezone <action>` - Timezone channel management
+- `/setup` - Initial bot configuration
+- `/setup_timezone` - Configure timezone display channels
+- `/setup_alerts` - Configure alert channels
+- `/setup_market_channels` - Configure market event channels
+- `/purge <count>` - Delete messages from current channel
+
+### 🤖 HAL 9000 AI Assistant
+- **Usage**: Mention the bot with your question: `@HAL what's the BTC price?`
+- Crypto market analysis powered by GPT-3.5-turbo
+- Maintains conversation context within channels (30-minute memory)
+- Rate limited to prevent spam (3-second cooldown per user)
+- **Admin Commands**:
+  - `!hal_clear` - Clear HAL's memory for the current channel (mods only)
+  - `!hal_help` - Show HAL help information
+
 
 ## Logging
 
@@ -216,7 +221,7 @@ Logs are stored in the `logs/` directory:
 - `market-events.log` - Market event logs
 - `auto-updates.log` - Auto update logs
 - `engagement.log` - Engagement system logs
-- `ai_chat.log` - AI assistant logs
+- `ai_chat.log` - HAL AI assistant logs
 - `slash_commands.log` - General slash command logs
 - `errors.log` - Error-only log
 
@@ -251,7 +256,6 @@ All features can be toggled via database settings:
 - Funding alerts
 - Volatility scanner
 - Engagement tracking
-- AI assistant
 
 Use `/admin action:settings` to view current configuration.
 
