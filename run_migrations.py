@@ -134,7 +134,9 @@ def main():
         applied_versions = get_applied_versions(connection)
         
         # Discover all migration files
-        migrations_dir = "/app/migrations"
+        # Use relative path that works both in Docker and production
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        migrations_dir = os.path.join(script_dir, "migrations")
         migration_files = sorted([
             f for f in os.listdir(migrations_dir) 
             if f.endswith('.py') and f[0].isdigit()
