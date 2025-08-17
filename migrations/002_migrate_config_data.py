@@ -50,26 +50,33 @@ def migrate_config():
     
     logger.info(f"Loaded config from {config_file}")
     
-    # Get guild ID from bot logs or environment
-    # For production, this should be read from logs or environment
-    guild_id = None
+    # Get guild ID from config file first, then fallback to environment
+    guild_id = config_data.get('guild_id')
     
-    # Try to extract guild ID from Discord bot logs
-    log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs', 'discord.log')
-    if os.path.exists(log_path):
-        with open(log_path, 'r') as f:
-            for line in f:
-                if 'Guild ID:' in line:
-                    try:
-                        guild_id = int(line.split('Guild ID:')[1].strip().split()[0])
-                        logger.info(f"Found guild ID from logs: {guild_id}")
-                        break
-                    except:
-                        pass
-    
-    # Fallback to environment variable
+    # If not in config, try environment variable
     if not guild_id:
-        guild_id = int(os.getenv('DISCORD_GUILD_ID', '1000000000000000000'))
+        guild_id = os.getenv('DISCORD_GUILD_ID')
+        if guild_id:
+            guild_id = int(guild_id)
+    
+    # If still not found, try to extract from Discord bot logs
+    if not guild_id:
+        log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs', 'discord.log')
+        if os.path.exists(log_path):
+            with open(log_path, 'r') as f:
+                for line in f:
+                    if 'Guild ID:' in line:
+                        try:
+                            guild_id = int(line.split('Guild ID:')[1].strip().split()[0])
+                            logger.info(f"Found guild ID from logs: {guild_id}")
+                            break
+                        except:
+                            pass
+    
+    # Last resort fallback (shouldn't happen)
+    if not guild_id:
+        logger.error("No guild ID found in config, environment, or logs!")
+        raise ValueError("Guild ID is required for migration")
     
     server_name = config_data.get('server_name', 'Unknown')
     
