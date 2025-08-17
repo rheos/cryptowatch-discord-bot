@@ -260,13 +260,7 @@ class AdminCommands(SlashCommandBase):
         import asyncio
         import os
         
-        # Check if engagement is enabled in database settings
-        engagement_enabled = await self.bot.db.get_setting(interaction.guild.id, 'engagement_enabled')
-        if engagement_enabled != 'true':
-            await interaction.followup.send(
-                "❌ Engagement tracking is not enabled. Use /setup to enable it first."
-            )
-            return
+        # No need to check if engagement is enabled - backfill should work regardless
         
         embed = discord.Embed(
             title="🔄 Starting Engagement Backfill",
@@ -288,7 +282,8 @@ class AdminCommands(SlashCommandBase):
                 "--guild", str(interaction.guild.id),
                 "--days", "30",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=os.environ.copy()  # Pass environment variables to subprocess
             )
             
             # Read progress updates

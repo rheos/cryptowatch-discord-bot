@@ -18,7 +18,8 @@ class VolatilityCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        api_base = config.get('api_base_url', 'https://example.com/api')
+        # API base URL is static - always use production API
+        api_base = 'https://example.com/api'
         self.base_url = f"{api_base}/volatility-scanner"
         self.session = None
         self.sent_alerts = {}  # Track alerts: {symbol: highest_timeframe_hours}
@@ -247,7 +248,16 @@ class VolatilityCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def volatility_alerts(self):
         """Check for extreme volatility and send alerts"""
-        if not self.config.get('auto_update_channels', {}).get('alerts'):
+        # Get alerts channel from database for first guild (or could iterate all guilds)
+        guilds = self.bot.guilds
+        if not guilds:
+            return
+            
+        # For now, use first guild - could be enhanced to check all guilds
+        guild = guilds[0]
+        alerts_channel_id = await self.bot.db.get_setting(guild.id, 'general_alerts')
+        
+        if not alerts_channel_id:
             return
             
         # Define alert thresholds - matching web app defaults
@@ -263,7 +273,7 @@ class VolatilityCog(commands.Cog):
         if not data or not data.get('success'):
             return
             
-        channel_id = self.config['auto_update_channels']['alerts']
+        channel_id = int(alerts_channel_id)
         channel = self.bot.get_channel(channel_id)
         if not channel:
             logger.error(f"Alerts channel {channel_id} not found")

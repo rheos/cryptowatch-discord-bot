@@ -24,8 +24,8 @@ class CryptoDataCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        api_base = config.get('api_base_url', 'https://example.com/api')
-        self.api_base = api_base
+        # API base URL is static - always use production API
+        self.api_base = 'https://example.com/api'
         self.session = None
         self.crypto_api = None
     

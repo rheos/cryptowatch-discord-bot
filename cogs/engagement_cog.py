@@ -23,40 +23,27 @@ class EngagementCog(commands.Cog):
         # Note: enabled status is checked from database in each event handler
         # Not cached here since it can be changed at runtime
         
-        # Role names from config
-        engagement_config = self.config.get('engagement', {})
-        roles_config = engagement_config.get('roles', {})
-        self.NEWMEMBER_ROLE = roles_config.get('new_member', 'NewMember')
-        self.MEMBER_ROLE = roles_config.get('member', 'Member')
-        self.ACTIVE_ROLE = roles_config.get('active', 'Active')
-        self.VACATION_ROLE = roles_config.get('vacation', 'Vacation')
+        # Default role names (these should eventually come from database too)
+        self.NEWMEMBER_ROLE = 'NewMember'
+        self.MEMBER_ROLE = 'Member'
+        self.ACTIVE_ROLE = 'Active'
+        self.VACATION_ROLE = 'Vacation'
         
-        # Activity thresholds from config
-        thresholds_config = engagement_config.get('thresholds', {})
-        self.ACTIVE_MESSAGES_THRESHOLD = thresholds_config.get('active_messages', 10)
-        self.ACTIVE_DAYS_THRESHOLD = thresholds_config.get('active_days', 30)
+        # Default thresholds - will be overridden by database settings per guild
+        self.ACTIVE_MESSAGES_THRESHOLD = 10
+        self.ACTIVE_DAYS_THRESHOLD = 30
         
-        # Channel names from config
-        self.channels_config = engagement_config.get('channels', {})
+        # Channel names - empty by default, loaded from database per guild
+        self.channels_config = {}
         
-        # Warning system config
-        warnings_config = engagement_config.get('warnings', {})
-        self.warnings_enabled = warnings_config.get('enabled', True)
-        self.warning_days_before = warnings_config.get('days_before', 7)
-        self.dm_warnings_enabled = warnings_config.get('dm_enabled', True)
-        self.min_messages_warning = warnings_config.get('min_messages_warning', 7)
+        # Warning system defaults - will be overridden by database settings
+        self.warnings_enabled = True
+        self.warning_days_before = 7
+        self.dm_warnings_enabled = True
+        self.min_messages_warning = 7
         
-        # Parse start date for warnings
-        start_after_str = warnings_config.get('start_after', None)
-        if start_after_str:
-            try:
-                self.warnings_start_date = datetime.strptime(start_after_str, '%Y-%m-%d')
-                self.logger.info(f"Warnings will start after {start_after_str}")
-            except ValueError:
-                self.warnings_start_date = None
-                self.logger.error(f"Invalid start_after date format: {start_after_str}")
-        else:
-            self.warnings_start_date = None
+        # No start date by default
+        self.warnings_start_date = None
         
         # Message buffer to reduce database writes
         self.message_buffer = defaultdict(lambda: defaultdict(int))
@@ -73,6 +60,41 @@ class EngagementCog(commands.Cog):
         self.check_activity.start()
         self.flush_message_buffer.start()
         self.logger.info("EngagementCog initialized")
+    
+    async def get_engagement_settings(self, guild_id: int) -> dict:
+        """Get engagement settings from database for a guild"""
+        settings = {}
+        
+        # Get thresholds
+        messages_threshold = await self.bot.db.get_setting(guild_id, 'messages_threshold')
+        if messages_threshold:
+            settings['messages_threshold'] = int(messages_threshold)
+        else:
+            settings['messages_threshold'] = self.ACTIVE_MESSAGES_THRESHOLD
+            
+        days_threshold = await self.bot.db.get_setting(guild_id, 'days_threshold')
+        if days_threshold:
+            settings['days_threshold'] = int(days_threshold)
+        else:
+            settings['days_threshold'] = self.ACTIVE_DAYS_THRESHOLD
+            
+        # Get warning settings
+        warning_days = await self.bot.db.get_setting(guild_id, 'warning_days')
+        if warning_days:
+            settings['warning_days'] = int(warning_days)
+        else:
+            settings['warning_days'] = self.warning_days_before
+            
+        warning_min_messages = await self.bot.db.get_setting(guild_id, 'warning_min_messages')
+        if warning_min_messages:
+            settings['warning_min_messages'] = int(warning_min_messages)
+        else:
+            settings['warning_min_messages'] = self.min_messages_warning
+            
+        dm_warnings = await self.bot.db.get_setting(guild_id, 'dm_warnings')
+        settings['dm_warnings'] = dm_warnings == 'true' if dm_warnings else self.dm_warnings_enabled
+        
+        return settings
     
     def cog_unload(self):
         self.check_activity.cancel()

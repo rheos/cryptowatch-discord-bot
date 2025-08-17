@@ -58,7 +58,6 @@ class SetupCommands(SlashCommandBase):
         app_commands.Choice(name="📋 Show Configuration", value="show"),
         app_commands.Choice(name="🔄 Toggle Engagement Tracking", value="engagement"),
         app_commands.Choice(name="📈 Toggle Market Events", value="market"),
-        app_commands.Choice(name="📊 Backfill Engagement Data", value="backfill"),
         app_commands.Choice(name="📉 Check Engagement Status", value="engagement_status"),
     ])
     @app_commands.default_permissions(administrator=True)
@@ -72,8 +71,6 @@ class SetupCommands(SlashCommandBase):
             await self._handle_toggle_engagement(interaction)
         elif action == "market":
             await self._handle_toggle_market(interaction)
-        elif action == "backfill":
-            await self._handle_backfill_engagement(interaction)
         elif action == "engagement_status":
             await self._handle_engagement_status(interaction)
     
@@ -523,7 +520,8 @@ class SetupCommands(SlashCommandBase):
                 "--guild", str(guild.id),
                 "--days", "30",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=os.environ.copy()  # Pass environment variables to subprocess
             )
             
             # Update status

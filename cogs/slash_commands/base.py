@@ -20,9 +20,8 @@ class SlashCommandBase(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = getattr(bot, 'config', {})
-        # Use API URL from config, fallback to environment variable, then default
-        self.api_base_url = self.config.get('api_base_url', 
-                                           os.getenv('API_BASE_URL', 'http://app:5173/api'))
+        # API base URL is static - always use production API
+        self.api_base_url = 'https://example.com/api'
         logger.info(f"Using API base URL: {self.api_base_url}")
     
     async def fetch_json(self, url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
