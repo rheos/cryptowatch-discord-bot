@@ -380,11 +380,12 @@ class CryptoCommands(SlashCommandBase):
             app_commands.Choice(name="1 hour", value="1h"),
             app_commands.Choice(name="4 hours", value="4h"),
             app_commands.Choice(name="24 hours", value="24h"),
+            app_commands.Choice(name="48 hours", value="48h"),
         ]
     )
     async def volatility_command(self, interaction: discord.Interaction,
                                 mode: str,
-                                timeframe: str = "1h",
+                                timeframe: Optional[str] = None,
                                 limit: Optional[int] = 10,
                                 symbol: Optional[str] = None):
         """
@@ -423,6 +424,10 @@ class CryptoCommands(SlashCommandBase):
             
             # Scanner or movers mode: Find volatile coins across the market
             elif mode == "scanner" or mode == "movers":
+                # Scanner and movers need a timeframe, default to 1h if not specified
+                if timeframe is None:
+                    timeframe = "1h"
+                
                 # Define volatility thresholds for each timeframe
                 # Shorter timeframes have lower thresholds since price moves are smaller
                 default_thresholds = {
@@ -535,11 +540,76 @@ class CryptoCommands(SlashCommandBase):
             logger.error(f"Error in volatility command: {e}")
             await interaction.followup.send("❌ An error occurred while fetching volatility data")
     
-    async def _handle_volatility_check(self, interaction: discord.Interaction, symbol: str, timeframe: str):
+    async def _handle_volatility_check(self, interaction: discord.Interaction, symbol: str, timeframe: str = None):
         """
-        Handle checking volatility for a specific symbol (DRY - delegates to API client)
+        Handle checking volatility for a specific symbol
+        Uses the new symbol-volatility endpoint to get actual price changes
         """
-        # Use API client to get symbol volatility
+        logger.info(f"Checking volatility for symbol: {symbol}, timeframe: {timeframe}")
+        
+        # Get actual price change data from the new endpoint
+        volatility_data = await self.api_client.get_symbol_price_changes(symbol, timeframe)
+        logger.info(f"Got volatility data: {volatility_data}")
+        
+        if not volatility_data or not volatility_data.get('success'):
+            error_msg = volatility_data.get('error', 'Unknown error') if volatility_data else 'Failed to fetch data'
+            await interaction.followup.send(f"❌ {error_msg}")
+            return
+        
+        # If checking all timeframes
+        if timeframe is None:
+            embed = discord.Embed(
+                title=f"📊 {volatility_data['symbol']} Price Changes",
+                description="Actual price movements across timeframes",
+                color=discord.Color.blue()
+            )
+            
+            # Current price
+            current_price = float(volatility_data.get('currentPrice', 0))
+            embed.add_field(
+                name="💰 Current Price",
+                value=f"${current_price:.4f}",
+                inline=False
+            )
+            
+            # Price changes for each timeframe
+            embed.add_field(name="\u200b", value="**Price Changes:**", inline=False)
+            
+            for change_data in volatility_data.get('priceChanges', []):
+                tf = change_data['timeframe']
+                pct = float(change_data['priceChangePercent'])
+                
+                # Determine emoji based on change magnitude
+                if pct >= 5:
+                    emoji = "🚀"  # Big gain
+                elif pct > 0:
+                    emoji = "🔼"  # Small gain (white/light up triangle)
+                elif pct <= -5:
+                    emoji = "💥"  # Big loss
+                elif pct < 0:
+                    emoji = "🔻"  # Small loss (red down triangle)
+                else:
+                    emoji = "➖"  # Flat
+                
+                embed.add_field(
+                    name=f"{tf} {emoji}",
+                    value=f"{pct:+.2f}%",
+                    inline=True
+                )
+            
+            # Add volume if available
+            volume = float(volatility_data.get('volume', 0))
+            if volume > 0:
+                embed.add_field(
+                    name="📊 24h Volume",
+                    value=f"${volume:,.0f}",
+                    inline=False
+                )
+            
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Single timeframe check (original behavior)
         data = await self.api_client.get_symbol_volatility(symbol, timeframe)
         
         if not data:

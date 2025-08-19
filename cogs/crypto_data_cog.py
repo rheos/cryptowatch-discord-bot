@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 import aiohttp
 import logging
+import os
 from utils.crypto_api import CryptoAPI
 
 logger = logging.getLogger('discord-bot.crypto')
@@ -24,8 +25,8 @@ class CryptoDataCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        # API base URL is static - always use production API
-        self.api_base = 'https://example.com/api'
+        # Get API URL from environment variable
+        self.api_base = os.getenv('API_BASE_URL', 'https://example.com/api')
         self.session = None
         self.crypto_api = None
     

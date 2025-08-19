@@ -1,336 +1,321 @@
 """
-Admin commands for member management
-Handles engagement tracking and member administration
+Admin commands for server and member management
 """
 import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
+import os
+import asyncio
+import re
 from typing import Optional
 from .base import SlashCommandBase
 from utils.moderation import purge_messages, send_temporary_message
 
 logger = logging.getLogger('discord-bot.admin_commands')
 
+
 class AdminCommands(SlashCommandBase):
-    """Admin-related member management commands"""
+    """Admin commands for server and member management"""
     
-    @app_commands.command(name="admin", description="Admin commands for engagement management")
+    @app_commands.command(name="admin", description="Server and member management commands")
     @app_commands.describe(
         action="Admin action to perform",
-        member="Member to target (for specific actions)",
-        role="Role to grant/remove",
+        member="Target member (for member-specific actions)",
         limit="Number of results to show"
     )
     @app_commands.choices(action=[
-        app_commands.Choice(name="Analyze Member Activity", value="analyze"),
-        app_commands.Choice(name="Show Active Members", value="active"),
-        app_commands.Choice(name="Show Inactive Members", value="inactive"),
-        app_commands.Choice(name="Grant Role to Member", value="grant_role"),
-        app_commands.Choice(name="Remove Role from Member", value="remove_role"),
-        app_commands.Choice(name="Check Member Stats", value="check_member"),
-        app_commands.Choice(name="Refresh All Stats", value="refresh"),
-        app_commands.Choice(name="Backfill Engagement Data", value="backfill"),
+        app_commands.Choice(name="📊 Analyze Activity", value="analyze"),
+        app_commands.Choice(name="✅ Show Active Members", value="active"),
+        app_commands.Choice(name="⚠️ Show Inactive Members", value="inactive"),
+        app_commands.Choice(name="👤 Check Member Stats", value="check_member"),
+        app_commands.Choice(name="🔄 Refresh Roles", value="refresh"),
+        app_commands.Choice(name="📥 Backfill Data", value="backfill"),
+        app_commands.Choice(name="🏖️ Grant Vacation", value="vacation"),
+        app_commands.Choice(name="⚠️ Test Warning", value="test_warning"),
+        app_commands.Choice(name="💬 Set Intro Channel", value="set_intro"),
+        app_commands.Choice(name="⚙️ Engagement Settings", value="settings"),
     ])
     @app_commands.default_permissions(administrator=True)
     async def admin_command(self, interaction: discord.Interaction,
                            action: str,
                            member: Optional[discord.Member] = None,
-                           role: Optional[discord.Role] = None,
-                           limit: Optional[int] = None):
-        """Admin engagement management"""
+                           limit: Optional[int] = 10):
+        """Admin command hub - routes to appropriate modules"""
         await interaction.response.defer(ephemeral=True)
         
+        # Get engagement cog for member management
+        engagement_cog = self.bot.get_cog('EngagementCog')
+        if not engagement_cog:
+            await interaction.followup.send("❌ Engagement system not loaded")
+            return
+        
         try:
+            guild = interaction.guild
+            
             if action == "analyze":
-                await self._handle_analyze_members(interaction, limit)
+                stats = await engagement_cog.activity_tracker.get_all_member_stats(guild.id)
+                if not stats:
+                    await interaction.followup.send("No activity data found")
+                    return
+                
+                sorted_stats = sorted(stats, key=lambda x: x['total_messages'], reverse=True)[:limit]
+                lines = []
+                for i, stat in enumerate(sorted_stats, 1):
+                    m = guild.get_member(stat['user_id'])
+                    if m:
+                        lines.append(f"{i}. **{m.display_name}** - {stat['total_messages']} msgs")
+                
+                total_active = sum(1 for s in stats if s['total_messages'] >= 10)
+                embed = discord.Embed(
+                    title="📊 Activity Analysis",
+                    description="\n".join(lines) if lines else "No data",
+                    color=discord.Color.blue()
+                )
+                embed.set_footer(text=f"{total_active}/{len(stats)} active (10+ msgs)")
+                await interaction.followup.send(embed=embed)
+                
             elif action == "active":
-                await self._handle_show_active(interaction, limit)
+                stats = await engagement_cog.activity_tracker.get_active_members(guild.id)
+                if not stats:
+                    await interaction.followup.send("No active members found")
+                    return
+                
+                lines = []
+                for stat in stats[:limit]:
+                    m = guild.get_member(stat['user_id'])
+                    if m:
+                        lines.append(f"• **{m.display_name}** - {stat['total_messages']} msgs")
+                
+                embed = discord.Embed(
+                    title="✅ Active Members",
+                    description="\n".join(lines) if lines else "None",
+                    color=discord.Color.green()
+                )
+                embed.set_footer(text=f"Total: {len(stats)} active")
+                await interaction.followup.send(embed=embed)
+                
             elif action == "inactive":
-                await self._handle_show_inactive(interaction, limit)
-            elif action == "grant_role":
-                if not member or not role:
-                    await interaction.followup.send("❌ Grant role requires both member and role parameters")
+                active_role = discord.utils.get(guild.roles, name="Active")
+                if not active_role:
+                    await interaction.followup.send("❌ Active role not found")
                     return
-                await self._handle_grant_role(interaction, member, role)
-            elif action == "remove_role":
-                if not member or not role:
-                    await interaction.followup.send("❌ Remove role requires both member and role parameters")
+                
+                inactive = []
+                for m in active_role.members:
+                    activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, m.id)
+                    if activity['messages'] < 10:
+                        inactive.append((m, activity['messages']))
+                
+                if not inactive:
+                    await interaction.followup.send("No inactive members with Active role")
                     return
-                await self._handle_remove_role(interaction, member, role)
+                
+                inactive.sort(key=lambda x: x[1])
+                lines = [f"• **{m.display_name}** - {msgs} msgs" for m, msgs in inactive[:limit]]
+                
+                embed = discord.Embed(
+                    title="⚠️ Inactive Members",
+                    description="\n".join(lines),
+                    color=discord.Color.orange()
+                )
+                embed.set_footer(text=f"Total: {len(inactive)} inactive")
+                await interaction.followup.send(embed=embed)
+                
             elif action == "check_member":
                 if not member:
-                    await interaction.followup.send("❌ Check member requires a member parameter")
+                    await interaction.followup.send("❌ Please specify a member")
                     return
-                await self._handle_check_member(interaction, member)
+                
+                activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, member.id)
+                settings = await self.bot.db.get_engagement_settings(guild.id)
+                threshold = settings.get('messages_threshold', 10) if settings else 10
+                
+                embed = discord.Embed(
+                    title=f"📊 {member.display_name}",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="30-Day Stats",
+                    value=f"Messages: {activity['messages']}\nActive Days: {activity.get('active_days', 0)}",
+                    inline=False
+                )
+                
+                status = "✅ Active" if activity['messages'] >= threshold else f"❌ Needs {threshold - activity['messages']} more"
+                embed.add_field(name="Status", value=status, inline=False)
+                
+                await interaction.followup.send(embed=embed)
+                
             elif action == "refresh":
-                await self._handle_refresh_stats(interaction)
+                await engagement_cog.role_manager.update_member_roles(guild)
+                await interaction.followup.send("✅ Roles refreshed")
+                
             elif action == "backfill":
-                await self._handle_backfill(interaction)
+                # Call the external backfill script
+                script_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                    "scripts", "backfill_engagement.py"
+                )
+                
+                embed = discord.Embed(
+                    title="📥 Starting Backfill",
+                    description="Launching backfill script...",
+                    color=discord.Color.blue()
+                )
+                msg = await interaction.followup.send(embed=embed, wait=True)
+                
+                # Track start time
+                start_time = asyncio.get_event_loop().time()
+                
+                process = await asyncio.create_subprocess_exec(
+                    "python3", script_path,
+                    "--guild", str(guild.id),
+                    "--days", "30",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                
+                stdout, stderr = await process.communicate()
+                
+                # Calculate elapsed time
+                elapsed = asyncio.get_event_loop().time() - start_time
+                
+                if process.returncode == 0:
+                    embed.title = "✅ Backfill Complete"
+                    embed.color = discord.Color.green()
+                    
+                    # Parse output for statistics
+                    output = stdout.decode() if stdout else ""
+                    
+                    # Debug: Print to console what we received
+                    print(f"[BACKFILL DEBUG] stdout captured: {len(output)} chars")
+                    if output:
+                        print(f"[BACKFILL DEBUG] First 500 chars: {output[:500]}")
+                        print(f"[BACKFILL DEBUG] Sample lines:")
+                        for line in output.split('\n')[:5]:
+                            print(f"  -> {line}")
+                    
+                    lines = output.split('\n')
+                    
+                    # Extract key metrics from output
+                    channels_scanned = 0
+                    messages_processed = 0
+                    members_found = 0
+                    records_updated = 0
+                    
+                    for line in lines:
+                        # Look for "Found X accessible text channels" 
+                        if "Found" in line and "accessible text channels" in line:
+                            try:
+                                # Line format: "2025-08-18 16:10:31,534 - INFO -   Found 8 accessible text channels"
+                                import re
+                                match = re.search(r'Found (\d+) accessible', line)
+                                if match:
+                                    channels_scanned = int(match.group(1))
+                            except:
+                                pass
+                        # Look for "Guild scan complete: X members with activity"
+                        elif "Guild scan complete:" in line:
+                            try:
+                                # Line format: "2025-08-18 16:10:42,322 - INFO -   Guild scan complete: 4 members with activity"
+                                match = re.search(r'Guild scan complete: (\d+) members', line)
+                                if match:
+                                    members_found = int(match.group(1))
+                            except:
+                                pass
+                        # Look for "Total messages to store: X"
+                        elif "Total messages to store:" in line:
+                            try:
+                                # Line format: "2025-08-18 16:10:42,324 - INFO - Total messages to store: 38"
+                                match = re.search(r'Total messages to store: (\d+)', line)
+                                if match:
+                                    messages_processed = int(match.group(1))
+                            except:
+                                pass
+                        # Look for "Successfully inserted/updated X activity records"
+                        elif "Successfully inserted/updated" in line:
+                            try:
+                                # Line format: "2025-08-18 16:10:42,343 - INFO - ✓ Successfully inserted/updated 10 activity records"
+                                match = re.search(r'inserted/updated (\d+) activity', line)
+                                if match:
+                                    records_updated = int(match.group(1))
+                            except:
+                                pass
+                    
+                    # Build description with results
+                    desc_lines = []
+                    if channels_scanned > 0:
+                        desc_lines.append(f"📁 Scanned **{channels_scanned}** channels")
+                    if messages_processed > 0:
+                        desc_lines.append(f"💬 Processed **{messages_processed:,}** messages")
+                    if members_found > 0:
+                        desc_lines.append(f"👥 Found **{members_found}** active members")
+                    if records_updated > 0:
+                        desc_lines.append(f"📊 Updated **{records_updated}** database records")
+                    
+                    # Add timing
+                    if elapsed < 60:
+                        desc_lines.append(f"⏱️ Completed in **{elapsed:.1f}** seconds")
+                    else:
+                        minutes = int(elapsed // 60)
+                        seconds = int(elapsed % 60)
+                        desc_lines.append(f"⏱️ Completed in **{minutes}m {seconds}s**")
+                    
+                    embed.description = "\n".join(desc_lines) if desc_lines else "Backfill completed successfully"
+                    
+                else:
+                    embed.title = "❌ Backfill Failed"
+                    embed.description = stderr.decode()[:200] if stderr else "Unknown error"
+                    embed.color = discord.Color.red()
+                
+                await msg.edit(embed=embed)
+                
+            elif action == "vacation":
+                if not member:
+                    await interaction.followup.send("❌ Please specify a member for vacation")
+                    return
+                    
+                success, message = await engagement_cog.role_manager.grant_vacation_role(guild, member, days=30)
+                await interaction.followup.send(message)
+                
+            elif action == "test_warning":
+                if not member:
+                    await interaction.followup.send("❌ Please specify a member to test warning")
+                    return
+                    
+                success, message = await engagement_cog.warning_system.test_warning(guild, member)
+                await interaction.followup.send(message)
+                
+            elif action == "set_intro":
+                await self.bot.db.set_setting(guild.id, 'introductions_channel_id', str(interaction.channel.id))
+                await interaction.followup.send(
+                    f"✅ Set {interaction.channel.mention} as introductions channel\n"
+                    f"New members must post 50+ chars here for Member role"
+                )
+                
+            elif action == "settings":
+                settings = await self.bot.db.get_engagement_settings(guild.id)
+                
+                embed = discord.Embed(title="⚙️ Engagement Settings", color=discord.Color.blue())
+                
+                if settings:
+                    embed.add_field(name="Enabled", value="✅" if settings.get('enabled') else "❌", inline=True)
+                    embed.add_field(name="Threshold", value=f"{settings.get('messages_threshold', 10)} msgs", inline=True)
+                    embed.add_field(name="Period", value=f"{settings.get('days_threshold', 30)} days", inline=True)
+                else:
+                    embed.description = "Using defaults"
+                
+                intro_id = await self.bot.db.get_setting(guild.id, 'introductions_channel_id')
+                if intro_id:
+                    channel = guild.get_channel(int(intro_id))
+                    if channel:
+                        embed.add_field(name="Intro Channel", value=channel.mention, inline=False)
+                
+                await interaction.followup.send(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error in admin command: {e}")
-            await interaction.followup.send("❌ An error occurred while processing the command")
-    
-    async def _handle_analyze_members(self, interaction: discord.Interaction, limit: Optional[int]):
-        """Analyze all members"""
-        guild = interaction.guild
-        
-        # Get member stats from database
-        all_stats = await self.bot.db.get_all_member_stats(guild.id, days=30)
-        
-        if not all_stats:
-            await interaction.followup.send("No member activity data found.")
-            return
-        
-        # Sort by total messages
-        sorted_stats = sorted(all_stats, key=lambda x: x['total_messages'], reverse=True)
-        
-        # Determine how many to show
-        if limit is None:
-            limit = len(sorted_stats)  # Show all if no limit specified
-            description = f"All {len(sorted_stats)} members by 30-day activity"
-        else:
-            description = f"Top {min(limit, len(sorted_stats))} members by 30-day activity"
-        
-        embed = discord.Embed(
-            title="📊 Member Activity Analysis",
-            description=description,
-            color=discord.Color.blue()
-        )
-        
-        # Format top members
-        lines = []
-        for i, stat in enumerate(sorted_stats[:limit], 1):
-            member = guild.get_member(stat['user_id'])
-            if member:
-                name = member.display_name
-                messages = stat['total_messages']
-                days = stat['active_days']
-                lines.append(f"`{i:02d}` **{name}** - {messages} msgs, {days} days")
-        
-        if lines:
-            embed.add_field(name="Most Active Members", value="\n".join(lines), inline=False)
-        
-        # Summary stats
-        total_active = sum(1 for s in all_stats if s['total_messages'] >= 10)
-        total_members = len(all_stats)
-        
-        embed.add_field(name="Active Members", value=f"{total_active}/{total_members}", inline=True)
-        embed.add_field(name="Activity Rate", value=f"{(total_active/total_members*100):.1f}%", inline=True)
-        
-        await interaction.followup.send(embed=embed)
-    
-    async def _handle_show_active(self, interaction: discord.Interaction, limit: Optional[int]):
-        """Show active members"""
-        guild = interaction.guild
-        active_stats = await self.bot.db.get_active_members(guild.id, threshold=10, days=30)
-        
-        if not active_stats:
-            await interaction.followup.send("No active members found.")
-            return
-        
-        embed = discord.Embed(
-            title="✅ Active Members",
-            description=f"Members with 10+ messages in last 30 days",
-            color=discord.Color.green()
-        )
-        
-        lines = []
-        display_limit = limit if limit else len(active_stats)
-        for stat in active_stats[:display_limit]:
-            member = guild.get_member(stat['user_id'])
-            if member:
-                lines.append(f"• **{member.display_name}** - {stat['total_messages']} messages")
-        
-        if lines:
-            field_name = f"All {len(lines)} Active Members" if limit is None else f"Top {len(lines)} Active Members"
-            embed.add_field(name=field_name, value="\n".join(lines), inline=False)
-        
-        embed.set_footer(text=f"Total: {len(active_stats)} active members")
-        await interaction.followup.send(embed=embed)
-    
-    async def _handle_show_inactive(self, interaction: discord.Interaction, limit: Optional[int]):
-        """Show inactive members"""
-        guild = interaction.guild
-        
-        # Get all members with Active role
-        active_role = discord.utils.get(guild.roles, name="Active")
-        if not active_role:
-            await interaction.followup.send("❌ Active role not found")
-            return
-        
-        inactive_members = []
-        for member in active_role.members:
-            stats = await self.bot.db.get_member_stats(guild.id, member.id, days=30)
-            if not stats or stats['total_messages'] < 10:
-                inactive_members.append((member, stats['total_messages'] if stats else 0))
-        
-        if not inactive_members:
-            await interaction.followup.send("No inactive members with Active role found.")
-            return
-        
-        # Sort by message count
-        inactive_members.sort(key=lambda x: x[1])
-        
-        embed = discord.Embed(
-            title="⚠️ Inactive Members",
-            description="Members with Active role but <10 messages in 30 days",
-            color=discord.Color.orange()
-        )
-        
-        lines = []
-        for member, msg_count in inactive_members[:limit]:
-            lines.append(f"• **{member.display_name}** - {msg_count} messages")
-        
-        if lines:
-            embed.add_field(name=f"Top {len(lines)} Inactive Members", value="\n".join(lines), inline=False)
-        
-        embed.set_footer(text=f"Total: {len(inactive_members)} inactive members")
-        await interaction.followup.send(embed=embed)
-    
-    async def _handle_grant_role(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
-        """Grant role to member"""
-        try:
-            await member.add_roles(role)
-            await interaction.followup.send(f"✅ Granted **{role.name}** role to {member.mention}")
-        except discord.Forbidden:
-            await interaction.followup.send("❌ I don't have permission to manage that role")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error granting role: {str(e)}")
-    
-    async def _handle_remove_role(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
-        """Remove role from member"""
-        try:
-            await member.remove_roles(role)
-            await interaction.followup.send(f"✅ Removed **{role.name}** role from {member.mention}")
-        except discord.Forbidden:
-            await interaction.followup.send("❌ I don't have permission to manage that role")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error removing role: {str(e)}")
-    
-    async def _handle_check_member(self, interaction: discord.Interaction, member: discord.Member):
-        """Check specific member stats"""
-        stats = await self.bot.db.get_member_stats(interaction.guild_id, member.id, days=30)
-        
-        embed = discord.Embed(
-            title=f"📊 Stats for {member.display_name}",
-            color=discord.Color.blue()
-        )
-        
-        if stats and stats['total_messages'] > 0:
-            embed.add_field(name="30-Day Activity", 
-                          value=f"Messages: {stats['total_messages']}\nActive Days: {stats['active_days']}", 
-                          inline=False)
-            
-            # Check qualification
-            if stats['total_messages'] >= 10:
-                status = "✅ Qualifies for Active"
-            else:
-                status = f"❌ Needs {10 - stats['total_messages']} more messages"
-            
-            embed.add_field(name="Active Status", value=status, inline=False)
-        else:
-            embed.description = "No activity recorded in the last 30 days"
-        
-        # Show current roles
-        roles = [r.name for r in member.roles if r.name != "@everyone"]
-        if roles:
-            embed.add_field(name="Current Roles", value=", ".join(roles), inline=False)
-        
-        await interaction.followup.send(embed=embed)
-    
-    async def _handle_refresh_stats(self, interaction: discord.Interaction):
-        """Refresh all member stats"""
-        guild = interaction.guild
-        
-        embed = discord.Embed(
-            title="🔄 Refreshing Member Stats",
-            description="This may take a moment...",
-            color=discord.Color.blue()
-        )
-        msg = await interaction.followup.send(embed=embed)
-        
-        # Get engagement cog and run update
-        engagement_cog = self.bot.get_cog('EngagementCog')
-        if engagement_cog:
-            await engagement_cog.update_all_members(guild)
-            
-            embed.title = "✅ Stats Refreshed"
-            embed.description = "All member statistics have been updated"
-            embed.color = discord.Color.green()
-            
-            await msg.edit(embed=embed)
-        else:
-            await msg.edit(content="❌ Engagement cog not found")
-    
-    async def _handle_backfill(self, interaction: discord.Interaction):
-        """Handle engagement data backfill with progress reporting"""
-        import asyncio
-        import os
-        
-        # No need to check if engagement is enabled - backfill should work regardless
-        
-        embed = discord.Embed(
-            title="🔄 Starting Engagement Backfill",
-            description="Initializing...",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=embed)
-        msg = await interaction.original_response()
-        
-        try:
-            # Run the backfill script
-            script_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                "scripts", "backfill_engagement.py"
-            )
-            
-            process = await asyncio.create_subprocess_exec(
-                "python3", script_path,
-                "--guild", str(interaction.guild.id),
-                "--days", "30",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=os.environ.copy()  # Pass environment variables to subprocess
-            )
-            
-            # Read progress updates
-            last_update = ""
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-                    
-                text = line.decode().strip()
-                # Update on channel progress lines
-                if "Scanning channel" in text or "Guild scan complete" in text:
-                    last_update = text.split("INFO - ")[-1] if "INFO - " in text else text
-                    embed.description = last_update
-                    await msg.edit(embed=embed)
-            
-            # Wait for completion
-            await process.wait()
-            
-            if process.returncode == 0:
-                embed.title = "✅ Backfill Complete"
-                embed.description = "Successfully backfilled engagement data"
-                embed.color = discord.Color.green()
-            else:
-                stderr_data = await process.stderr.read()
-                error = stderr_data.decode() if stderr_data else "Unknown error"
-                embed.title = "❌ Backfill Failed"
-                embed.description = f"Error: {error[:200]}"
-                embed.color = discord.Color.red()
-            
-            await msg.edit(embed=embed)
-                
-        except Exception as e:
-            logger.error(f"Error during backfill: {e}")
-            embed.title = "❌ Error"
-            embed.description = str(e)
-            embed.color = discord.Color.red()
-            await msg.edit(embed=embed)
+            await interaction.followup.send(f"❌ Error: {e}")
     
     @app_commands.command(name="purge", description="Delete multiple messages from the current channel")
     @app_commands.describe(
@@ -386,6 +371,7 @@ class AdminCommands(SlashCommandBase):
                 f"#{interaction.channel.name} ({interaction.guild.name})"
                 f"{f' - Reason: {reason}' if reason else ''}"
             )
+
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))

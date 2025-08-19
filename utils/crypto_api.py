@@ -154,6 +154,30 @@ class CryptoAPI:
     
     # ========== Price Methods ==========
     
+    async def get_symbol_price_changes(self, symbol: str, timeframe: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Get actual price change percentages for a specific symbol across timeframes
+        
+        Args:
+            symbol: Cryptocurrency symbol (e.g., 'BTC', 'ETH')
+            timeframe: Optional specific timeframe (e.g., '1h', '24h')
+            
+        Returns:
+            Dictionary with price changes for each timeframe
+        """
+        # Normalize symbol
+        symbol = symbol.upper().replace('USDT', '').strip()
+        
+        # Use the new symbol-volatility endpoint
+        url = f"{self.api_base_url}/symbol-volatility?symbol={symbol}"
+        if timeframe:
+            url += f"&timeframe={timeframe}"
+        
+        logger.info(f"Fetching symbol volatility from: {url}")
+        data = await self.fetch_json(url, timeout=10)
+        logger.info(f"Symbol volatility response: {data}")
+        return data
+    
     async def get_symbol_price(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get price data for a specific symbol
