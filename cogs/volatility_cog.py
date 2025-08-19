@@ -357,7 +357,6 @@ class VolatilityCog(commands.Cog):
             
             embed = discord.Embed(
                 title="🚨 Volatility Alert",
-                description="Notable price movements detected!",
                 color=discord.Color.orange(),
                 timestamp=datetime.utcnow()
             )
