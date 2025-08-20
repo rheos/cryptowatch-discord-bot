@@ -9,10 +9,20 @@ import pymysql
 from pymysql.cursors import DictCursor
 import subprocess
 import logging
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Try to load .env file if it exists and dotenv is available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, assume environment is already set up
+    pass
+
+# Also handle shell-format .env files with export statements
+if os.path.exists('.env') and not os.getenv('MYSQL_PASSWORD'):
+    # If .env exists but password not set, it might be shell format
+    # User should run: source .env
+    pass
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -120,6 +130,13 @@ def run_migration(connection, filepath, version):
 def main():
     """Main entry point"""
     logger.info("\nStarting Discord bot database migrations...")
+    
+    # Check if environment is properly set up
+    if not os.getenv('MYSQL_PASSWORD') and os.path.exists('.env'):
+        logger.warning("⚠️  Environment variables not loaded. If using shell-format .env, run:")
+        logger.warning("    source .env")
+        logger.warning("    python3 run_migrations.py")
+        logger.warning("")
     
     # Determine if we're in Docker or production
     # In Docker, use 'mysql' service name; in production use 'localhost'
