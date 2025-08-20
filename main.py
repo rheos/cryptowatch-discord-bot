@@ -11,6 +11,14 @@ import asyncio
 import os
 import sys
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not installed, assume environment is already configured
+    pass
+
 # Import database
 from database import BotDatabase
 import json
