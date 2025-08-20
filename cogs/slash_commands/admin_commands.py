@@ -60,12 +60,15 @@ class AdminCommands(SlashCommandBase):
                     await interaction.followup.send("No activity data found")
                     return
                 
-                sorted_stats = sorted(stats, key=lambda x: x['total_messages'], reverse=True)[:limit]
+                sorted_stats = sorted(stats, key=lambda x: x['total_messages'], reverse=True)
+                if limit:
+                    sorted_stats = sorted_stats[:limit]
                 lines = []
                 for i, stat in enumerate(sorted_stats, 1):
                     m = guild.get_member(stat['user_id'])
                     if m:
-                        lines.append(f"{i}. **{m.display_name}** - {stat['total_messages']} msgs")
+                        active_days = stat.get('active_days', 0)
+                        lines.append(f"{i}. **{m.display_name}** - {stat['total_messages']} msgs, {active_days} days")
                 
                 total_active = sum(1 for s in stats if s['total_messages'] >= 10)
                 embed = discord.Embed(
@@ -83,10 +86,12 @@ class AdminCommands(SlashCommandBase):
                     return
                 
                 lines = []
-                for stat in stats[:limit]:
+                stats_to_show = stats[:limit] if limit else stats
+                for stat in stats_to_show:
                     m = guild.get_member(stat['user_id'])
                     if m:
-                        lines.append(f"• **{m.display_name}** - {stat['total_messages']} msgs")
+                        active_days = stat.get('active_days', 0)
+                        lines.append(f"• **{m.display_name}** - {stat['total_messages']} msgs, {active_days} days")
                 
                 embed = discord.Embed(
                     title="✅ Active Members",
@@ -113,7 +118,8 @@ class AdminCommands(SlashCommandBase):
                     return
                 
                 inactive.sort(key=lambda x: x[1])
-                lines = [f"• **{m.display_name}** - {msgs} msgs" for m, msgs in inactive[:limit]]
+                inactive_to_show = inactive[:limit] if limit else inactive
+                lines = [f"• **{m.display_name}** - {msgs} msgs" for m, msgs in inactive_to_show]
                 
                 embed = discord.Embed(
                     title="⚠️ Inactive Members",
