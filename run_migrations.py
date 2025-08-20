@@ -117,9 +117,20 @@ def main():
     """Main entry point"""
     logger.info("\nStarting Discord bot database migrations...")
     
+    # Determine if we're in Docker or production
+    # In Docker, use 'mysql' service name; in production use 'localhost'
+    mysql_host = os.getenv('MYSQL_HOST')
+    if not mysql_host:
+        # Check if we're in a Docker environment
+        if os.path.exists('/.dockerenv') or os.getenv('ENVIRONMENT') == 'dev':
+            mysql_host = 'mysql'
+        else:
+            # Production environment
+            mysql_host = 'localhost'
+    
     # Connect to database
     connection = pymysql.connect(
-        host=os.getenv('MYSQL_HOST', 'mysql'),
+        host=mysql_host,
         port=int(os.getenv('MYSQL_PORT', 3306)),
         user=os.getenv('MYSQL_USER', 'cwt_user'),
         password=os.getenv('MYSQL_PASSWORD', 'example_password'),
