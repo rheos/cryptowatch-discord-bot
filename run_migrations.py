@@ -9,6 +9,10 @@ import pymysql
 from pymysql.cursors import DictCursor
 import subprocess
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
