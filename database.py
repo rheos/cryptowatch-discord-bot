@@ -113,7 +113,7 @@ class BotDatabase:
                 
                 result = await cursor.fetchone()
                 if not result:
-                    logger.error(f"Setting key not found: {setting_key}")
+                    logger.error(f"Setting key not found in registry: {setting_key}")
                     return False
                 
                 setting_id = result['setting_id']
@@ -338,8 +338,9 @@ class BotDatabase:
         # Note: engagement_enabled is in Features section, others are in Engagement section
         engagement_keys = [
             'engagement_enabled',  # In Features section (enables/disables the feature)
-            'messages_threshold',  # In Engagement section
-            'days_threshold',      # In Engagement section
+            'messages_threshold',  # In Engagement section (message count requirement)
+            'days_threshold',      # In Engagement section (lookback period)
+            'active_days_threshold',  # In Engagement section (unique days requirement)
             'warning_days',        # In Engagement section
             'warning_min_messages', # In Engagement section
             'dm_warnings'          # In Engagement section
@@ -347,13 +348,15 @@ class BotDatabase:
         
         for key in engagement_keys:
             value = await self.get_setting(guild_id, key)
-            # Map to old field names for compatibility
+            # Return the settings with their actual key names
             if key == 'engagement_enabled':
                 settings['enabled'] = value
             elif key == 'messages_threshold':
-                settings['active_messages_threshold'] = value
+                settings['messages_threshold'] = value
             elif key == 'days_threshold':
-                settings['active_days_threshold'] = value
+                settings['days_threshold'] = value  # This is the lookback period
+            elif key == 'active_days_threshold':
+                settings['active_days_threshold'] = value  # This is the unique days requirement
             elif key == 'warning_days':
                 settings['warning_days_before'] = value
             elif key == 'warning_min_messages':
@@ -429,6 +432,21 @@ class BotDatabase:
                     message_count = message_count + VALUES(message_count)
                 """, (guild_id, user_id, activity_date, message_count))
                 await conn.commit()
+    
+    async def get_data_age(self, guild_id: int) -> int:
+        """Get how many days of data we have for this guild"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute("""
+                    SELECT DATEDIFF(CURDATE(), MIN(activity_date)) as data_age
+                    FROM member_activity_daily
+                    WHERE guild_id = %s
+                """, (guild_id,))
+                
+                result = await cursor.fetchone()
+                if result and result['data_age'] is not None:
+                    return result['data_age']
+                return 0
     
     async def get_activity_summary(self, guild_id: int) -> dict:
         """Get summary of engagement data for a guild"""

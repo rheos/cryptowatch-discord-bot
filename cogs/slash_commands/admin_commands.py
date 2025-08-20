@@ -35,6 +35,7 @@ class AdminCommands(SlashCommandBase):
         app_commands.Choice(name="⚠️ Test Warning", value="test_warning"),
         app_commands.Choice(name="💬 Set Intro Channel", value="set_intro"),
         app_commands.Choice(name="⚙️ Engagement Settings", value="settings"),
+        app_commands.Choice(name="📝 Configure Thresholds", value="configure"),
     ])
     @app_commands.default_permissions(administrator=True)
     async def admin_command(self, interaction: discord.Interaction,
@@ -300,8 +301,15 @@ class AdminCommands(SlashCommandBase):
                 
                 if settings:
                     embed.add_field(name="Enabled", value="✅" if settings.get('enabled') else "❌", inline=True)
-                    embed.add_field(name="Threshold", value=f"{settings.get('messages_threshold', 10)} msgs", inline=True)
-                    embed.add_field(name="Period", value=f"{settings.get('days_threshold', 30)} days", inline=True)
+                    embed.add_field(name="Messages Required", value=f"{settings.get('messages_threshold', 10)}", inline=True)
+                    embed.add_field(name="Lookback Period", value=f"{settings.get('days_threshold', 30)} days", inline=True)
+                    
+                    # Show active days requirement if set
+                    active_days = settings.get('active_days_threshold')
+                    if active_days:
+                        embed.add_field(name="Active Days Required", value=f"{active_days} days", inline=True)
+                    else:
+                        embed.add_field(name="Active Days Required", value="Not set", inline=True)
                 else:
                     embed.description = "Using defaults"
                 
@@ -313,8 +321,97 @@ class AdminCommands(SlashCommandBase):
                 
                 await interaction.followup.send(embed=embed)
                 
+            elif action == "configure":
+                await interaction.followup.send(
+                    "Use `/admin_config` to configure engagement thresholds:\n"
+                    "• Set message requirement for Active role\n"
+                    "• Set active days requirement\n"
+                    "• Set lookback period"
+                )
+                
         except Exception as e:
             logger.error(f"Error in admin command: {e}")
+            await interaction.followup.send(f"❌ Error: {e}")
+    
+    @app_commands.command(name="admin_config", description="Configure engagement thresholds for Active role")
+    @app_commands.describe(
+        messages="Number of messages required for Active role",
+        active_days="Number of unique days with activity required",
+        period="Number of days to look back (default: 30)"
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def admin_config_command(
+        self,
+        interaction: discord.Interaction,
+        messages: Optional[int] = None,
+        active_days: Optional[int] = None,
+        period: Optional[int] = None
+    ):
+        """Configure engagement thresholds"""
+        await interaction.response.defer(ephemeral=True)
+        
+        if messages is None and active_days is None and period is None:
+            await interaction.followup.send(
+                "❌ Please provide at least one parameter to configure:\n"
+                "• `messages`: Number of messages required\n"
+                "• `active_days`: Number of unique days with activity\n"
+                "• `period`: Days to look back"
+            )
+            return
+        
+        guild = interaction.guild
+        updates = []
+        
+        try:
+            # Update message threshold
+            if messages is not None:
+                if messages < 1 or messages > 1000:
+                    await interaction.followup.send("❌ Messages must be between 1 and 1000")
+                    return
+                await self.bot.db.set_setting(guild.id, 'messages_threshold', str(messages))
+                updates.append(f"✅ Message threshold set to **{messages}**")
+            
+            # Update active days threshold
+            if active_days is not None:
+                if active_days < 1 or active_days > 365:
+                    await interaction.followup.send("❌ Active days must be between 1 and 365")
+                    return
+                await self.bot.db.set_setting(guild.id, 'active_days_threshold', str(active_days))
+                updates.append(f"✅ Active days requirement set to **{active_days}**")
+            
+            # Update period (days to look back)
+            if period is not None:
+                if period < 1 or period > 365:
+                    await interaction.followup.send("❌ Period must be between 1 and 365 days")
+                    return
+                await self.bot.db.set_setting(guild.id, 'days_threshold', str(period))
+                updates.append(f"✅ Lookback period set to **{period} days**")
+            
+            # Get current settings to show
+            settings = await self.bot.db.get_engagement_settings(guild.id)
+            
+            embed = discord.Embed(
+                title="⚙️ Engagement Configuration Updated",
+                description="\n".join(updates),
+                color=discord.Color.green()
+            )
+            
+            # Show new configuration
+            embed.add_field(
+                name="Current Settings",
+                value=(
+                    f"**Messages Required**: {settings.get('messages_threshold', 10)}\n"
+                    f"**Active Days Required**: {settings.get('active_days_threshold', 'Not set')}\n"
+                    f"**Lookback Period**: {settings.get('days_threshold', 30)} days"
+                ),
+                inline=False
+            )
+            
+            embed.set_footer(text="Run /admin → Refresh Roles to apply changes")
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error configuring thresholds: {e}")
             await interaction.followup.send(f"❌ Error: {e}")
     
     @app_commands.command(name="purge", description="Delete multiple messages from the current channel")
