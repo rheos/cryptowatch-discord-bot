@@ -112,6 +112,23 @@ class EngagementCog(commands.Cog):
             # Check if this triggers a role upgrade
             await self.role_manager.handle_new_member_message(message)
     
+    @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        """Check edited messages for introduction upgrades"""
+        # Only check if content actually changed
+        if before.content == after.content:
+            return
+            
+        # Skip bot messages
+        if after.author.bot:
+            return
+            
+        # Only check in guilds
+        if after.guild:
+            # Check if the edited message now qualifies for role upgrade
+            # (e.g., user edited their intro to make it longer)
+            await self.role_manager.handle_new_member_message(after)
+    
     # All prefix commands removed - use slash commands instead
     # /engagement for all engagement features
 

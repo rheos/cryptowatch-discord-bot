@@ -171,24 +171,36 @@ class RoleManager:
             return False
         
         # Check message length requirement (50+ characters)
-        logger.info(f"Checking introduction from {member.name} in #{message.channel.name}: {len(message.content)} chars")
+        edited_text = " (edited)" if message.edited_at else ""
+        logger.info(f"Checking introduction{edited_text} from {member.name} in #{message.channel.name}: {len(message.content)} chars")
         if len(message.content) >= 50:
             if member_role:
+                # Get Active role
+                active_role = discord.utils.get(guild.roles, name=self.ACTIVE_ROLE)
+                
+                # Add Member role and remove NewMember
                 await member.add_roles(member_role)
                 await member.remove_roles(newmember_role)
-                logger.info(f"✅ Upgraded {member.name} from NewMember to Member after {len(message.content)} char introduction")
                 
-                # Send confirmation message
+                # Also grant Active role for grace period
+                if active_role:
+                    await member.add_roles(active_role)
+                    logger.info(f"✅ Upgraded {member.name} from NewMember to Member+Active after {len(message.content)} char introduction")
+                else:
+                    logger.info(f"✅ Upgraded {member.name} from NewMember to Member after {len(message.content)} char introduction (Active role not found)")
+                
+                # Send confirmation message that auto-deletes
                 confirm_embed = discord.Embed(
                     title="✅ Welcome to the Community!",
                     description=(
                         f"Thank you for your introduction, {member.mention}!\n\n"
-                        "You now have **Member** access and can see all channels.\n"
-                        "Feel free to explore and join the conversation!"
+                        "You now have **Member** and **Active** status with full access to all channels.\n"
+                        "Feel free to explore and join the conversation!\n\n"
+                        "_Stay active to keep your Active role after the grace period._"
                     ),
                     color=discord.Color.green()
                 )
-                await message.channel.send(embed=confirm_embed)
+                await message.channel.send(embed=confirm_embed, delete_after=30)  # Delete after 30 seconds
                 return True
             else:
                 logger.warning(f"Member role not found in guild {guild.name}")
@@ -198,7 +210,7 @@ class RoleManager:
                 f"{member.mention} Your introduction needs to be at least 50 characters. "
                 f"(Currently {len(message.content)} characters)\n"
                 "Please tell us a bit more about yourself!",
-                delete_after=30  # Delete after 30 seconds
+                delete_after=20  # Delete after 20 seconds
             )
         
         return False
