@@ -77,6 +77,8 @@ class RoleManager:
                         effective_active_days_threshold = max(1, int(active_days_threshold * ratio))
                 else:
                     effective_messages = messages_threshold
+                    # Keep the original active_days_threshold (could be None)
+                    effective_active_days_threshold = active_days_threshold
                 
                 # Check if we have enough data for THIS SPECIFIC MEMBER
                 # For members who joined recently (< lookback period ago):
@@ -102,7 +104,7 @@ class RoleManager:
                 qualifies_for_active = msg_count >= effective_messages
                 
                 # If active_days_threshold is set, also check that requirement
-                if effective_active_days_threshold and qualifies_for_active:
+                if effective_active_days_threshold is not None and qualifies_for_active:
                     qualifies_for_active = active_days >= effective_active_days_threshold
                 
                 # Update roles based on activity
