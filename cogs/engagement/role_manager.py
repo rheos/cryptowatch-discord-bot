@@ -28,10 +28,16 @@ class RoleManager:
             if not settings or not settings.get('enabled'):
                 return
             
-            # Get thresholds
-            messages_threshold = settings.get('messages_threshold', 10)
-            days_threshold = settings.get('days_threshold', 30)
-            active_days_threshold = settings.get('active_days_threshold', None)  # Optional
+            # Get thresholds with guaranteed integer defaults
+            messages_threshold = settings.get('messages_threshold', 10) if settings else 10
+            days_threshold = settings.get('days_threshold', 30) if settings else 30
+            active_days_threshold = settings.get('active_days_threshold', None) if settings else None
+            
+            # Ensure thresholds are integers, not None
+            messages_threshold = int(messages_threshold) if messages_threshold is not None else 10
+            days_threshold = int(days_threshold) if days_threshold is not None else 30
+            if active_days_threshold is not None:
+                active_days_threshold = int(active_days_threshold)
             
             # Get roles
             newmember_role = discord.utils.get(guild.roles, name=self.NEWMEMBER_ROLE)
@@ -54,8 +60,8 @@ class RoleManager:
                 
                 # Get member activity
                 stats = await self.bot.db.get_member_stats(guild.id, member.id, days_threshold)
-                msg_count = stats['total_messages'] if stats else 0
-                active_days = stats.get('active_days', 0) if stats else 0
+                msg_count = int(stats['total_messages']) if stats and stats.get('total_messages') is not None else 0
+                active_days = int(stats.get('active_days', 0)) if stats and stats.get('active_days') is not None else 0
                 
                 # Check how long member has been in the guild
                 days_in_guild = (datetime.now(timezone.utc) - member.joined_at).days if member.joined_at else days_threshold
