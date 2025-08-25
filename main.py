@@ -165,11 +165,9 @@ class CryptoWatchBot(commands.Bot):
         for guild in self.guilds:
             await self.db.register_guild(guild.id, guild.name, guild.owner_id)
             
-            # Check if this guild has channels configured
-            settings = await self.db.get_guild_settings(guild.id)
-            if not settings or not settings.get('channels'):
-                # Try to auto-configure from config file if this is the primary guild
-                await self._auto_configure_guild(guild)
+            # Try to auto-configure from config file if this is the primary guild
+            # and no settings exist yet
+            await self._auto_configure_guild(guild)
         
         # Set bot status
         await self.change_presence(
@@ -185,42 +183,31 @@ class CryptoWatchBot(commands.Bot):
         # This works for single-server bots where config has the actual IDs
         try:
             # Check if config has channel IDs (not just names)
-            if 'market_event_channel_id' in self.config:
+            if 'market_event_channel_id' in self.config or 'timezone_channels' in self.config:
                 self.logger.info(f"Auto-configuring channels for guild {guild.name} from config file")
                 
-                # Import channel configuration logic
-                from database import BotDatabase
                 async with self.db.pool.acquire() as conn:
                     async with conn.cursor() as cursor:
-                        # Configure timezone channels
+                        # Configure timezone channels in timezone_channels table
                         for tz_config in self.config.get('timezone_channels', []):
                             channel = guild.get_channel(tz_config['channel_id'])
                             if channel:
                                 await cursor.execute("""
-                                    INSERT INTO guild_channels (guild_id, channel_type, channel_id, settings)
-                                    VALUES (%s, %s, %s, %s)
-                                    ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)
+                                    INSERT INTO timezone_channels (guild_id, channel_id, timezone)
+                                    VALUES (%s, %s, %s)
+                                    ON DUPLICATE KEY UPDATE timezone = VALUES(timezone)
                                 """, (
                                     guild.id,
-                                    f"timezone_{tz_config['timezone'].replace('/', '_')}",
                                     tz_config['channel_id'],
-                                    json.dumps({'timezone': tz_config['timezone']})
+                                    tz_config['timezone']
                                 ))
                         
-                        # Configure other channels from config
-                        channel_mappings = [
-                            ('market_event_channel_id', 'market_events'),
-                            ('market_times_message_channel_id', 'market_times'),
-                        ]
+                        # Configure market channels using guild_settings
+                        if 'market_event_channel_id' in self.config:
+                            await self.db.set_setting(guild.id, 'market_countdown', str(self.config['market_event_channel_id']))
                         
-                        for config_key, channel_type in channel_mappings:
-                            channel_id = self.config.get(config_key)
-                            if channel_id and guild.get_channel(channel_id):
-                                await cursor.execute("""
-                                    INSERT INTO guild_channels (guild_id, channel_type, channel_id, settings)
-                                    VALUES (%s, %s, %s, %s)
-                                    ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)
-                                """, (guild.id, channel_type, channel_id, '{}'))
+                        if 'market_times_message_channel_id' in self.config:
+                            await self.db.set_setting(guild.id, 'market_schedule', str(self.config['market_times_message_channel_id']))
                         
                         await conn.commit()
                         self.logger.info(f"Auto-configuration complete for guild {guild.name}")

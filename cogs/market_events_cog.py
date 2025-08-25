@@ -442,8 +442,11 @@ class MarketEventsCog(commands.Cog):
             logger.warning(f"Could not pin market times message in {channel.name}")
         
         # Store the new message ID - this should overwrite any old value
-        await self.bot.db.set_setting(guild_id, 'market_schedule_message_id', str(message.id))
-        logger.info(f"Stored new message ID: {message.id}")
+        success = await self.bot.db.set_setting(guild_id, 'market_schedule_message_id', str(message.id))
+        if success:
+            logger.info(f"Stored new message ID: {message.id}")
+        else:
+            logger.error(f"Failed to store message ID {message.id} - setting not registered")
         
         # Force a small delay to ensure database write completes
         await asyncio.sleep(0.2)

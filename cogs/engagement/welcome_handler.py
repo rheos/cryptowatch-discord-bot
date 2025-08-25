@@ -43,11 +43,26 @@ class WelcomeHandler:
     async def send_welcome_message(self, guild, member):
         """Send welcome message to new member"""
         try:
-            # Find welcome channel
-            welcome_channel = discord.utils.get(guild.text_channels, name='welcome-chat')
+            # Get welcome channel from database first, then fall back to name lookup
+            welcome_channel = None
+            welcome_channel_id = await self.bot.db.get_setting(guild.id, 'welcome_channel_id')
+            
+            if welcome_channel_id:
+                welcome_channel = guild.get_channel(int(welcome_channel_id))
+                if not welcome_channel:
+                    logger.warning(f"Welcome channel ID {welcome_channel_id} not found in {guild.name}")
+            
+            # Fall back to looking for channel containing 'welcome' in the name
             if not welcome_channel:
-                logger.warning(f"Welcome channel not found in {guild.name}")
-                return
+                # Find first channel with 'welcome' in the name
+                for channel in guild.text_channels:
+                    if 'welcome' in channel.name.lower():
+                        welcome_channel = channel
+                        break
+                
+                if not welcome_channel:
+                    logger.warning(f"Welcome channel not found in {guild.name} (checked ID and channels containing 'welcome')")
+                    return
             
             # Get the introductions channel reference
             intro_channel_id = await self.bot.db.get_setting(guild.id, 'introductions_channel_id')
@@ -60,11 +75,13 @@ class WelcomeHandler:
                     intro_channel_mention = intro_channel.mention
                     intro_channel_name = intro_channel.name
             else:
-                # Try to find by name
-                intro_channel = discord.utils.get(guild.text_channels, name='introductions')
-                if intro_channel:
-                    intro_channel_mention = intro_channel.mention
-                    intro_channel_name = intro_channel.name
+                # Try to find channel containing 'introductions' in the name
+                for channel in guild.text_channels:
+                    if 'introductions' in channel.name.lower():
+                        intro_channel = channel
+                        intro_channel_mention = channel.mention
+                        intro_channel_name = channel.name
+                        break
             
             # Build description with proper channel reference
             if intro_channel_mention:

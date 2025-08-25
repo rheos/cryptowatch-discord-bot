@@ -164,8 +164,8 @@ class RoleManager:
         if intro_channel_id:
             is_intro_channel = (str(message.channel.id) == intro_channel_id)
         else:
-            # Fallback to channel name if no ID is set
-            is_intro_channel = (message.channel.name == 'introductions')
+            # Fallback to channel name containing 'introductions' if no ID is set
+            is_intro_channel = 'introductions' in message.channel.name.lower()
         
         # Only upgrade in introductions channel
         if not is_intro_channel:

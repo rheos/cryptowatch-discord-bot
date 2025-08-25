@@ -178,54 +178,9 @@ class BotDatabase:
         else:  # string
             return value
     
-    # Channel Management
-    async def configure_guild_channel(self, guild_id: int, channel_type: str, channel_id: int, 
-                                    settings: dict = None, channel_subtype: str = None):
-        """Configure a channel for a guild"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute("""
-                    INSERT INTO guild_channels (guild_id, channel_type, channel_subtype, channel_id, settings)
-                    VALUES (%s, %s, %s, %s, %s) AS new_values
-                    ON DUPLICATE KEY UPDATE 
-                        settings = new_values.settings,
-                        updated_at = NOW()
-                """, (guild_id, channel_type, channel_subtype, channel_id, json.dumps(settings or {})))
-                await conn.commit()
-    
-    async def get_guild_channels(self, guild_id: int, channel_type: str = None) -> List[Dict[str, Any]]:
-        """Get configured channels for a guild"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cursor:
-                query = "SELECT * FROM guild_channels WHERE guild_id = %s"
-                params = [guild_id]
-                
-                if channel_type:
-                    query += " AND channel_type = %s"
-                    params.append(channel_type)
-                
-                await cursor.execute(query, params)
-                
-                channels = []
-                for row in await cursor.fetchall():
-                    channel_data = dict(row)
-                    if channel_data['settings']:
-                        channel_data['settings'] = json.loads(channel_data['settings'])
-                    channels.append(channel_data)
-                
-                return channels
-    
-    async def remove_guild_channel(self, guild_id: int, channel_id: int) -> bool:
-        """Remove a channel configuration by channel ID"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute("""
-                    DELETE FROM guild_channels 
-                    WHERE guild_id = %s AND channel_id = %s
-                """, (guild_id, channel_id))
-                affected = cursor.rowcount
-                await conn.commit()
-                return affected > 0
+    # NOTE: guild_channels table is deprecated
+    # Use timezone_channels for timezone data
+    # Use guild_settings for all other channel configurations
     
     # Activity Tracking
     async def track_message(self, guild_id: int, user_id: int):
@@ -398,25 +353,9 @@ class BotDatabase:
                 # Get all settings
                 settings = await self.get_all_settings(guild_id)
                 
-                # Get channels
-                channels = {}
-                channel_list = await self.get_guild_channels(guild_id)
-                for channel in channel_list:
-                    if channel['channel_subtype']:
-                        # For timezone channels
-                        key = f"{channel['channel_type']}_{channel['channel_subtype'].replace('/', '_')}"
-                    else:
-                        key = channel['channel_type']
-                    
-                    channels[key] = {
-                        'id': channel['channel_id'],
-                        'settings': channel['settings']
-                    }
-                
                 return {
                     'guild': guild,
-                    'settings': settings,
-                    'channels': channels
+                    'settings': settings
                 }
     
     async def update_member_activity(self, guild_id: int, user_id: int, 
@@ -485,12 +424,3 @@ class BotDatabase:
                 
                 return None
     
-    async def remove_guild_channel(self, guild_id: int, channel_id: int):
-        """Remove a channel configuration"""
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute("""
-                    DELETE FROM guild_channels 
-                    WHERE guild_id = %s AND channel_id = %s
-                """, (guild_id, channel_id))
-                await conn.commit()

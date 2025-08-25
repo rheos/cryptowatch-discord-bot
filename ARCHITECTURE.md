@@ -80,6 +80,7 @@ discord-bot/
   ```
 
 ### Database Operations
+- **Database Name**: `cryptowatch_bot` (NOT discord_bot!)
 - **Connection Pool**: `database.py` - USE `self.bot.db` 
 - **Engagement Stats**: `self.bot.db.get_member_stats()`
 - **Settings**: `self.bot.db.get_setting()` / `set_setting()`
@@ -182,6 +183,8 @@ Set in `docker-compose.yml`:
 - `ENVIRONMENT`: dev/prod
 - `API_BASE_URL`: http://app:5173/api (internal Docker network)
 - `MYSQL_*`: Database credentials
+  - `MYSQL_DATABASE`: `cryptowatch_bot` (Discord bot database)
+  - Note: Main app uses `cryptowatchtools` database
 
 ---
 

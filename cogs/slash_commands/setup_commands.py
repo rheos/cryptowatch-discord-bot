@@ -187,6 +187,26 @@ class SetupCommands(SlashCommandBase):
                 if tz_lines:
                     embed.add_field(name="🕐 Timezone Channels", value="\n".join(tz_lines), inline=False)
             
+            # Show engagement channels (welcome and introductions)
+            engagement_lines = []
+            
+            # Get welcome channel
+            welcome_channel_id = await self.bot.db.get_setting(guild_id, 'welcome_channel_id')
+            if welcome_channel_id:
+                welcome_channel = interaction.guild.get_channel(int(welcome_channel_id))
+                if welcome_channel:
+                    engagement_lines.append(f"👋 Welcome: {welcome_channel.mention}")
+            
+            # Get introductions channel
+            intro_channel_id = await self.bot.db.get_setting(guild_id, 'introductions_channel_id')
+            if intro_channel_id:
+                intro_channel = interaction.guild.get_channel(int(intro_channel_id))
+                if intro_channel:
+                    engagement_lines.append(f"💬 Introductions: {intro_channel.mention}")
+            
+            if engagement_lines:
+                embed.add_field(name="🤝 Engagement Channels", value="\n".join(engagement_lines), inline=False)
+            
             # Show configured channels
             channel_lines = []
             channel_names = {
@@ -386,15 +406,20 @@ class SetupCommands(SlashCommandBase):
         
         # First, remove any existing timezone configuration for this channel
         # This prevents duplicates when changing a channel's timezone
-        await self.bot.db.remove_guild_channel(interaction.guild_id, channel.id)
+        await db_helpers.remove_timezone_channel(self.bot.db.pool, interaction.guild_id, channel.id)
         
-        # Store in database
-        await self.bot.db.configure_guild_channel(
+        # Store in timezone_channels table
+        success = await db_helpers.add_timezone_channel(
+            self.bot.db.pool,
             interaction.guild_id,
-            f"timezone_{timezone.replace('/', '_')}",
             channel.id,
-            {'timezone': timezone}
+            timezone,
+            None  # display_name
         )
+        
+        if not success:
+            await interaction.followup.send("❌ Failed to configure timezone channel")
+            return
         
         embed = discord.Embed(
             title="✅ Timezone Channel Configured",
@@ -438,16 +463,29 @@ class SetupCommands(SlashCommandBase):
                                   channel: discord.TextChannel,
                                   alert_type: str):
         """Setup alert channel"""
-        await self.bot.db.configure_guild_channel(
+        # Map alert types to setting keys
+        setting_map = {
+            'market_events': 'market_alerts',  # Note: might not exist yet
+            'funding': 'funding_alerts',
+            'alerts': 'general_alerts'
+        }
+        
+        setting_key = setting_map.get(alert_type, alert_type)
+        
+        # Store in guild_settings
+        success = await self.bot.db.set_setting(
             interaction.guild_id,
-            alert_type,
-            channel.id,
-            {}
+            setting_key,
+            str(channel.id)
         )
+        
+        if not success:
+            await interaction.followup.send(f"❌ Failed to configure {alert_type} channel - setting may not be registered")
+            return
         
         channel_names = {
             'market_events': 'Market Events',
-            'funding': 'Funding Rates',
+            'funding': 'Funding Rates', 
             'alerts': 'General Alerts'
         }
         
@@ -462,18 +500,29 @@ class SetupCommands(SlashCommandBase):
                                            countdown_channel: discord.VoiceChannel,
                                            schedule_channel: discord.TextChannel):
         """Setup market event channels"""
-        # Configure countdown channel
-        await self.bot.db.configure_guild_channel(
+        # Configure countdown channel in guild_settings
+        success1 = await self.bot.db.set_setting(
             interaction.guild_id,
-            'market_events',
-            countdown_channel.id
+            'market_countdown',
+            str(countdown_channel.id)
         )
         
-        # Configure schedule channel
-        await self.bot.db.configure_guild_channel(
+        # Configure schedule channel in guild_settings
+        success2 = await self.bot.db.set_setting(
             interaction.guild_id,
-            'market_times',
-            schedule_channel.id
+            'market_schedule',
+            str(schedule_channel.id)
+        )
+        
+        if not success1 or not success2:
+            await interaction.followup.send("❌ Failed to configure market channels - settings may not be registered")
+            return
+        
+        # Also enable market events
+        await self.bot.db.set_setting(
+            interaction.guild_id,
+            'market_enabled',
+            'true'
         )
         
         embed = discord.Embed(
@@ -481,7 +530,7 @@ class SetupCommands(SlashCommandBase):
             description=(
                 f"**Countdown Channel**: {countdown_channel.mention}\n"
                 f"**Schedule Channel**: {schedule_channel.mention}\n\n"
-                "Use `/setup` → Toggle Market Events to enable/disable"
+                "Market events have been automatically enabled"
             ),
             color=discord.Color.green()
         )
