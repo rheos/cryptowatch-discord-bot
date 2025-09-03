@@ -154,7 +154,17 @@ class CryptoAPI:
     
     # ========== Price Methods ==========
     
-    async def get_symbol_price_changes(self, symbol: str, timeframe: str = None) -> Optional[Dict[str, Any]]:
+    async def get_market_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Get global market information (dominance, fear & greed, etc.)
+        
+        Returns:
+            Dictionary with market indicators
+        """
+        url = f"{self.api_base_url}/market-info"
+        return await self.fetch_json(url, timeout=10)
+    
+    async def get_price_changes(self, symbol: str, timeframe: str = None) -> Optional[Dict[str, Any]]:
         """
         Get actual price change percentages for a specific symbol across timeframes
         
@@ -178,7 +188,7 @@ class CryptoAPI:
         logger.info(f"Symbol volatility response: {data}")
         return data
     
-    async def get_symbol_price(self, symbol: str) -> Optional[Dict[str, Any]]:
+    async def get_price(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get price data for a specific symbol
         
@@ -191,27 +201,22 @@ class CryptoAPI:
         # Normalize symbol
         symbol = symbol.upper().replace('USDT', '').strip()
         
-        # First try our cache
-        url = f"{self.api_base_url}/volatility-scanner/price-data"
-        data = await self.fetch_json(url, timeout=5)
+        # Use our own /api/price endpoint
+        url = f"{self.api_base_url}/price?symbol={symbol}"
+        data = await self.fetch_json(url, timeout=10)
         
-        if data and 'symbols' in data:
-            # Search for the symbol in cached data
-            for sym, info in data['symbols'].items():
-                if sym.replace('-USDT', '').replace('USDT', '') == symbol:
-                    return info
-        
-        # If not in cache, try Binance directly
-        binance_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}USDT"
-        ticker_data = await self.fetch_json(binance_url, timeout=5)
-        
-        if ticker_data:
+        if data and 'price' in data:
             # Transform to our standard format
-            return {
-                'price': float(ticker_data.get('lastPrice', 0)),
-                'priceChangePercent': float(ticker_data.get('priceChangePercent', 0)),
-                'volume': float(ticker_data.get('volume', 0))
+            result = {
+                'price': float(data.get('price', 0)),
+                'priceChangePercent': float(data.get('change_24h', 0)) if data.get('change_24h') is not None else 0
             }
+            
+            # Include volume if available
+            if data.get('volume_24h') is not None:
+                result['volume'] = float(data.get('volume_24h'))
+            
+            return result
         
         return None
     

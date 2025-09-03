@@ -26,6 +26,7 @@ import json
 # Import cogs
 from cogs.timezone_cog import TimezoneCog
 from cogs.market_events_cog import MarketEventsCog
+from cogs.market_display_cog import MarketDisplayCog
 from cogs.crypto_data_cog import CryptoDataCog
 from cogs.auto_updates_cog import AutoUpdatesCog
 from cogs.volatility_cog import VolatilityCog
@@ -45,7 +46,7 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     
     # Set up separate loggers for each cog with their own files
-    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands']
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands', 'market_display']
     for cog_name in cog_loggers:
         cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
         cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging
@@ -59,8 +60,8 @@ def setup_logging():
         cog_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         cog_logger.addHandler(cog_handler)
         
-        # Also add console handler for crypto_commands and slash_commands for debugging
-        if cog_name in ['crypto_commands', 'slash_commands']:
+        # Also add console handler for debugging certain cogs
+        if cog_name in ['crypto_commands', 'slash_commands', 'market_display']:
             cog_logger.addHandler(console_handler)
     
     # Error-only log file
@@ -118,6 +119,7 @@ class CryptoWatchBot(commands.Bot):
         # await self.add_cog(SetupCog(self, self.config))  # Removed - using slash commands only
         await self.add_cog(TimezoneCog(self, self.config))
         await self.add_cog(MarketEventsCog(self, self.config))
+        await self.add_cog(MarketDisplayCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
         await self.add_cog(AutoUpdatesCog(self, self.config))
         await self.add_cog(VolatilityCog(self, self.config))
@@ -127,10 +129,12 @@ class CryptoWatchBot(commands.Bot):
         from cogs.slash_commands import CryptoCommands, UserCommands
         from cogs.slash_commands.admin_commands import AdminCommands
         from cogs.slash_commands.setup_commands import SetupCommands
+        from cogs.slash_commands.market_display_commands import MarketDisplayCommands
         await self.add_cog(CryptoCommands(self))
         await self.add_cog(UserCommands(self))
         await self.add_cog(AdminCommands(self))
         await self.add_cog(SetupCommands(self))
+        await self.add_cog(MarketDisplayCommands(self))
         
         self.logger.info("All cogs loaded successfully")
     

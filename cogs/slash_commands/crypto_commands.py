@@ -143,7 +143,7 @@ class CryptoCommands(SlashCommandBase):
         
         try:
             # Get price data using the API client
-            price_data = await self.api_client.get_symbol_price(symbol)
+            price_data = await self.api_client.get_price(symbol)
             
             if price_data:
                 # Format and send the price info
@@ -548,7 +548,7 @@ class CryptoCommands(SlashCommandBase):
         logger.info(f"Checking volatility for symbol: {symbol}, timeframe: {timeframe}")
         
         # Get actual price change data from the new endpoint
-        volatility_data = await self.api_client.get_symbol_price_changes(symbol, timeframe)
+        volatility_data = await self.api_client.get_price_changes(symbol, timeframe)
         logger.info(f"Got volatility data: {volatility_data}")
         
         if not volatility_data or not volatility_data.get('success'):
@@ -618,7 +618,7 @@ class CryptoCommands(SlashCommandBase):
         
         if not data.get('found'):
             # Symbol not volatile enough, try to show price data
-            price_data = await self.api_client.get_symbol_price(symbol)
+            price_data = await self.api_client.get_price(symbol)
             if price_data:
                 embed = discord.Embed(
                     title=f"📊 {symbol.upper()} - {timeframe}",

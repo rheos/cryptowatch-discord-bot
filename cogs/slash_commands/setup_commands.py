@@ -58,6 +58,7 @@ class SetupCommands(SlashCommandBase):
         app_commands.Choice(name="📋 Show Configuration", value="show"),
         app_commands.Choice(name="🔄 Toggle Engagement Tracking", value="engagement"),
         app_commands.Choice(name="📈 Toggle Market Events", value="market"),
+        app_commands.Choice(name="💹 Toggle Market Display", value="market_display"),
         app_commands.Choice(name="📉 Check Engagement Status", value="engagement_status"),
     ])
     @app_commands.default_permissions(administrator=True)
@@ -71,6 +72,8 @@ class SetupCommands(SlashCommandBase):
             await self._handle_toggle_engagement(interaction)
         elif action == "market":
             await self._handle_toggle_market(interaction)
+        elif action == "market_display":
+            await self._handle_toggle_market_display(interaction)
         elif action == "engagement_status":
             await self._handle_engagement_status(interaction)
     
@@ -495,6 +498,60 @@ class SetupCommands(SlashCommandBase):
             color=discord.Color.green()
         )
         await interaction.followup.send(embed=embed)
+    
+    async def _handle_toggle_market_display(self, interaction: discord.Interaction):
+        """Toggle market display feature on/off"""
+        guild_id = interaction.guild_id
+        
+        try:
+            # Get current state
+            current = await self.bot.db.get_setting(guild_id, 'market_display_enabled')
+            new_state = not current
+            
+            # Update setting
+            await self.bot.db.set_setting(guild_id, 'market_display_enabled', new_state)
+            
+            embed = discord.Embed(
+                title=f"{'✅ Market Display Enabled' if new_state else '❌ Market Display Disabled'}",
+                description=(
+                    "Voice channels will update with market data every 5 minutes"
+                    if new_state else
+                    "Market display updates have been stopped"
+                ),
+                color=discord.Color.green() if new_state else discord.Color.red()
+            )
+            
+            if new_state:
+                # Check if any channels are configured
+                async with self.bot.db.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        await cursor.execute("""
+                            SELECT COUNT(*) FROM market_display_channels
+                            WHERE guild_id = %s
+                        """, (guild_id,))
+                        count = (await cursor.fetchone())[0]
+                
+                if count == 0:
+                    embed.add_field(
+                        name="ℹ️ Next Step",
+                        value="Use `/market_display add` to configure voice channels",
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="✅ Channels Configured", 
+                        value=f"{count} channel(s) will be updated",
+                        inline=False
+                    )
+            
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error toggling market display: {e}", exc_info=True)
+            await interaction.followup.send(
+                f"❌ Failed to toggle market display: {str(e)}",
+                ephemeral=True
+            )
     
     async def _handle_setup_market_channels(self, interaction: discord.Interaction,
                                            countdown_channel: discord.VoiceChannel,
