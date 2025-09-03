@@ -75,12 +75,17 @@ class RoleManager:
                 effective_active_days_threshold = active_days_threshold
                 
                 # If member joined recently, adjust thresholds proportionally
+                # BUT: Ensure minimum reasonable thresholds to avoid giving roles too easily
                 if days_in_guild < days_threshold:
                     # Pro-rate requirements based on how long they've been here
                     ratio = days_in_guild / days_threshold
-                    effective_messages = max(1, int(messages_threshold * ratio))
+                    # Minimum 25% of threshold or 5 messages, whichever is higher
+                    min_messages = max(5, int(messages_threshold * 0.25))
+                    effective_messages = max(min_messages, int(messages_threshold * ratio))
                     if active_days_threshold:
-                        effective_active_days_threshold = max(1, int(active_days_threshold * ratio))
+                        # Minimum 25% of threshold or 3 days, whichever is higher
+                        min_days = max(3, int(active_days_threshold * 0.25))
+                        effective_active_days_threshold = max(min_days, int(active_days_threshold * ratio))
                 else:
                     effective_messages = messages_threshold
                     # Keep the original active_days_threshold (could be None)
@@ -113,23 +118,21 @@ class RoleManager:
                 if effective_active_days_threshold is not None and qualifies_for_active:
                     qualifies_for_active = active_days >= effective_active_days_threshold
                 
-                # Update roles based on activity
+                # IMPORTANT: Only update roles if user has posted introduction (has Member role)
+                # NewMember users must post introduction first to get Member/Active roles
+                if newmember_role in member.roles:
+                    # User hasn't posted introduction yet, skip role updates
+                    logger.debug(f"Skipping role update for {member.name} - awaiting introduction")
+                    continue
+                
+                # Update roles based on activity (only for members who have posted introductions)
                 if qualifies_for_active:
                     # Qualify for Active
                     if active_role not in member.roles:
                         await member.add_roles(active_role)
-                        if member_role not in member.roles:
-                            await member.add_roles(member_role)
-                        if newmember_role in member.roles:
-                            await member.remove_roles(newmember_role)
                         logger.info(f"Granted Active role to {member.name} ({msg_count} msgs, {active_days} active days)")
                 elif msg_count > 0:
-                    # Qualify for Member
-                    if member_role not in member.roles:
-                        await member.add_roles(member_role)
-                        if newmember_role in member.roles:
-                            await member.remove_roles(newmember_role)
-                    # Remove Active if they had it
+                    # Has Member role but doesn't qualify for Active anymore
                     if active_role in member.roles:
                         await member.remove_roles(active_role)
                         if active_days_threshold:

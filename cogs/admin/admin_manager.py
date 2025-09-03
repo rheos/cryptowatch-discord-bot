@@ -26,7 +26,11 @@ class AdminManager:
         if not engagement_cog:
             raise ValueError("Engagement system not loaded")
         
-        stats = await engagement_cog.activity_tracker.get_all_member_stats(guild.id)
+        # Get configured lookback period from database
+        settings = await self.bot.db.get_engagement_settings(guild.id)
+        lookback_days = settings.get('days_threshold', 30) if settings else 30
+        
+        stats = await engagement_cog.activity_tracker.get_all_member_stats(guild.id, lookback_days)
         if not stats:
             return discord.Embed(
                 title="📊 Activity Analysis",
@@ -45,13 +49,16 @@ class AdminManager:
                 active_days = stat.get('active_days', 0)
                 lines.append(f"{i}. **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days")
         
-        total_active = sum(1 for s in stats if s['total_messages'] >= 10)
+        # Get message threshold for active status
+        messages_threshold = settings.get('messages_threshold', 10) if settings else 10
+        
+        total_active = sum(1 for s in stats if s['total_messages'] >= messages_threshold)
         embed = discord.Embed(
-            title="📊 Activity Analysis",
+            title=f"📊 Activity Analysis (Last {lookback_days} Days)",
             description="\n".join(lines) if lines else "No data",
             color=discord.Color.blue()
         )
-        embed.set_footer(text=f"{total_active}/{len(stats)} active (10+ msgs)")
+        embed.set_footer(text=f"{total_active}/{len(stats)} active ({messages_threshold}+ msgs in {lookback_days} days)")
         return embed
     
     async def get_active_members(self, guild: discord.Guild, limit: int = 10) -> discord.Embed:
@@ -60,7 +67,12 @@ class AdminManager:
         if not engagement_cog:
             raise ValueError("Engagement system not loaded")
         
-        stats = await engagement_cog.activity_tracker.get_active_members(guild.id)
+        # Get configured thresholds from database
+        settings = await self.bot.db.get_engagement_settings(guild.id)
+        lookback_days = settings.get('days_threshold', 30) if settings else 30
+        messages_threshold = settings.get('messages_threshold', 10) if settings else 10
+        
+        stats = await engagement_cog.activity_tracker.get_active_members(guild.id, messages_threshold, lookback_days)
         if not stats:
             return discord.Embed(
                 title="✅ Active Members",
@@ -77,11 +89,11 @@ class AdminManager:
                 lines.append(f"• **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days")
         
         embed = discord.Embed(
-            title="✅ Active Members",
+            title=f"✅ Active Members (Last {lookback_days} Days)",
             description="\n".join(lines) if lines else "None",
             color=discord.Color.green()
         )
-        embed.set_footer(text=f"Total: {len(stats)} active")
+        embed.set_footer(text=f"Total: {len(stats)} active ({messages_threshold}+ msgs)")
         return embed
     
     async def get_inactive_members(self, guild: discord.Guild, limit: int = 10) -> discord.Embed:
@@ -89,6 +101,11 @@ class AdminManager:
         engagement_cog = self.bot.get_cog('EngagementCog')
         if not engagement_cog:
             raise ValueError("Engagement system not loaded")
+        
+        # Get configured thresholds from database
+        settings = await self.bot.db.get_engagement_settings(guild.id)
+        lookback_days = settings.get('days_threshold', 30) if settings else 30
+        messages_threshold = settings.get('messages_threshold', 10) if settings else 10
         
         active_role = discord.utils.get(guild.roles, name="Active")
         if not active_role:
@@ -100,8 +117,8 @@ class AdminManager:
         
         inactive = []
         for member in active_role.members:
-            activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, member.id)
-            if activity['messages'] < 10:
+            activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, member.id, lookback_days)
+            if activity['messages'] < messages_threshold:
                 inactive.append((member, activity['messages']))
         
         if not inactive:
@@ -116,11 +133,11 @@ class AdminManager:
         lines = [f"• **{m.display_name}** - {msgs} msgs" for m, msgs in inactive_to_show]
         
         embed = discord.Embed(
-            title="⚠️ Inactive Members",
+            title=f"⚠️ Inactive Members (Last {lookback_days} Days)",
             description="\n".join(lines),
             color=discord.Color.orange()
         )
-        embed.set_footer(text=f"Total: {len(inactive)} inactive")
+        embed.set_footer(text=f"Total: {len(inactive)} below {messages_threshold} msgs")
         return embed
     
     async def check_member_stats(self, guild: discord.Guild, member: discord.Member) -> discord.Embed:
@@ -129,16 +146,19 @@ class AdminManager:
         if not engagement_cog:
             raise ValueError("Engagement system not loaded")
         
-        activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, member.id)
+        # Get configured thresholds from database
         settings = await self.bot.db.get_engagement_settings(guild.id)
+        lookback_days = settings.get('days_threshold', 30) if settings else 30
         threshold = settings.get('messages_threshold', 10) if settings else 10
+        
+        activity = await engagement_cog.activity_tracker.get_member_activity(guild.id, member.id, lookback_days)
         
         embed = discord.Embed(
             title=f"📊 {member.display_name}",
             color=discord.Color.blue()
         )
         embed.add_field(
-            name="30-Day Stats",
+            name=f"{lookback_days}-Day Stats",
             value=f"Messages: {activity['messages']}\nActive Days: {activity.get('active_days', 0)}",
             inline=False
         )
@@ -323,6 +343,13 @@ class AdminManager:
                 return f"✅ Set {channel.mention} as introductions channel\nNew members must post 50+ chars here to get Member role"
             else:
                 return f"❌ Failed to set introductions channel - setting not registered in database\nPlease contact the bot administrator"
+        
+        elif channel_type == "engagement_log":
+            success = await self.bot.db.set_setting(guild.id, 'engagement_log_channel_id', str(channel.id))
+            if success:
+                return f"✅ Set {channel.mention} as engagement log channel\nWarning messages and role changes will be posted here"
+            else:
+                return f"❌ Failed to set engagement log channel - setting not registered in database\nPlease contact the bot administrator"
         
         else:
             return f"❌ Unknown channel type: {channel_type}"

@@ -24,8 +24,8 @@ class AdminCommands(SlashCommandBase):
     @app_commands.command(name="admin", description="Server and member management commands")
     @app_commands.describe(
         action="Admin action to perform",
-        member="Target member (for member-specific actions)",
-        limit="Number of results to show"
+        member="Target member (only for: Check Member, Grant Vacation, Test Warning)",
+        limit="Number of results (only for: Analyze, Active, Inactive, Backfill)"
     )
     @app_commands.choices(action=[
         app_commands.Choice(name="📊 Analyze Activity", value="analyze"),
@@ -206,6 +206,7 @@ class AdminCommands(SlashCommandBase):
     @app_commands.choices(channel_type=[
         app_commands.Choice(name="👋 Welcome Channel", value="welcome"),
         app_commands.Choice(name="💬 Introduction Channel", value="intro"),
+        app_commands.Choice(name="📝 Engagement Log Channel", value="engagement_log"),
     ])
     @app_commands.default_permissions(administrator=True)
     async def set_channels(self, interaction: discord.Interaction,
