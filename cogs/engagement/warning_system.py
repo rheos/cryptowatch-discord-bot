@@ -50,6 +50,12 @@ class WarningSystem:
     async def check_warning_needed(self, guild, member, activity, threshold=10):
         """Check if member needs a warning about losing Active status"""
         try:
+            # Check if enforcement is enabled first
+            enforce_engagement = await self.bot.db.get_setting(guild.id, 'enforce_engagement')
+            if enforce_engagement != 'true':
+                logger.debug(f"Skipping warning for {member.name} - enforcement disabled")
+                return
+            
             # Get warning settings
             settings = await self.get_warning_settings(guild.id)
             

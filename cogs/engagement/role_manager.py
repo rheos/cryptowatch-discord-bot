@@ -28,6 +28,10 @@ class RoleManager:
             if not settings or not settings.get('enabled'):
                 return
             
+            # Check if enforcement is enabled
+            enforce_engagement = await self.bot.db.get_setting(guild.id, 'enforce_engagement')
+            enforce_engagement = enforce_engagement == 'true' if enforce_engagement else False
+            
             # Get thresholds with guaranteed integer defaults
             messages_threshold = settings.get('messages_threshold', 10) if settings else 10
             days_threshold = settings.get('days_threshold', 30) if settings else 30
@@ -133,12 +137,15 @@ class RoleManager:
                         logger.info(f"Granted Active role to {member.name} ({msg_count} msgs, {active_days} active days)")
                 elif msg_count > 0:
                     # Has Member role but doesn't qualify for Active anymore
-                    if active_role in member.roles:
+                    # Only remove roles if enforcement is enabled
+                    if active_role in member.roles and enforce_engagement:
                         await member.remove_roles(active_role)
                         if active_days_threshold:
                             logger.info(f"Removed Active role from {member.name} ({msg_count} msgs, {active_days} active days)")
                         else:
                             logger.info(f"Removed Active role from {member.name} ({msg_count} msgs)")
+                    elif active_role in member.roles and not enforce_engagement:
+                        logger.debug(f"Would remove Active role from {member.name} but enforcement is disabled")
                 
         except Exception as e:
             logger.error(f"Error updating roles: {e}")

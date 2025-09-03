@@ -57,6 +57,7 @@ class SetupCommands(SlashCommandBase):
     @app_commands.choices(action=[
         app_commands.Choice(name="📋 Show Configuration", value="show"),
         app_commands.Choice(name="🔄 Toggle Engagement Tracking", value="engagement"),
+        app_commands.Choice(name="⚖️ Toggle Engagement Enforcement", value="enforce_engagement"),
         app_commands.Choice(name="📈 Toggle Market Events", value="market"),
         app_commands.Choice(name="💹 Toggle Market Display", value="market_display"),
         app_commands.Choice(name="📉 Check Engagement Status", value="engagement_status"),
@@ -70,6 +71,8 @@ class SetupCommands(SlashCommandBase):
             await self._handle_show(interaction)
         elif action == "engagement":
             await self._handle_toggle_engagement(interaction)
+        elif action == "enforce_engagement":
+            await self._handle_toggle_enforcement(interaction)
         elif action == "market":
             await self._handle_toggle_market(interaction)
         elif action == "market_display":
@@ -333,6 +336,56 @@ class SetupCommands(SlashCommandBase):
                 title="❌ Engagement Tracking Disabled",
                 description="Automatic role assignment has been disabled",
                 color=discord.Color.red()
+            )
+        
+        await interaction.followup.send(embed=embed)
+    
+    async def _handle_toggle_enforcement(self, interaction: discord.Interaction):
+        """Toggle engagement enforcement (role removal)"""
+        guild = interaction.guild
+        
+        # Check if engagement is enabled first
+        features = await db_helpers.get_feature_status(self.bot.db.pool, guild.id)
+        if not features.get('engagement', False):
+            embed = discord.Embed(
+                title="⚠️ Engagement Not Enabled",
+                description="You must enable engagement tracking first before enabling enforcement.\nUse `/setup` → **Toggle Engagement Tracking**",
+                color=discord.Color.yellow()
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Check current enforcement state
+        current_state = await db_helpers.get_guild_setting(self.bot.db.pool, guild.id, 'enforce_engagement')
+        current_state = current_state == 'true' if current_state else False
+        enable = not current_state
+        
+        # Toggle enforcement
+        await db_helpers.set_guild_setting(self.bot.db.pool, guild.id, 'enforce_engagement', str(enable).lower())
+        
+        if enable:
+            embed = discord.Embed(
+                title="⚖️ Engagement Enforcement Enabled",
+                description=(
+                    "Role removal is now **ACTIVE**:\n"
+                    "• Members who don't meet activity thresholds will lose their Active role\n"
+                    "• Warnings will be sent before role removal\n"
+                    "• NewMembers still need to post introductions to get roles\n\n"
+                    "Current thresholds: 10+ messages in 30 days for Active role"
+                ),
+                color=discord.Color.orange()
+            )
+        else:
+            embed = discord.Embed(
+                title="🛡️ Engagement Enforcement Disabled",
+                description=(
+                    "Role removal is now **DISABLED**:\n"
+                    "• Members can still gain Active role by meeting thresholds\n"
+                    "• Members will NOT lose roles for inactivity\n"
+                    "• Activity tracking continues for statistics\n"
+                    "• NewMember introduction system still works"
+                ),
+                color=discord.Color.blue()
             )
         
         await interaction.followup.send(embed=embed)

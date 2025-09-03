@@ -70,20 +70,23 @@ class EngagementCog(commands.Cog):
                 # Update roles
                 await self.role_manager.update_member_roles(guild)
                 
-                # Check for warnings
+                # Check for warnings (only if enforcement is enabled)
                 settings = await self.bot.db.get_engagement_settings(guild.id)
                 if settings and settings.get('enabled'):
-                    active_role = discord.utils.get(guild.roles, name='Active')
-                    if active_role:
-                        threshold = settings.get('messages_threshold', 10)
-                        for member in active_role.members:
-                            if not member.bot:
-                                activity = await self.activity_tracker.get_member_activity(
-                                    guild.id, member.id, days=30
-                                )
-                                await self.warning_system.check_warning_needed(
-                                    guild, member, activity, threshold
-                                )
+                    # Check if enforcement is enabled
+                    enforce_engagement = await self.bot.db.get_setting(guild.id, 'enforce_engagement')
+                    if enforce_engagement == 'true':
+                        active_role = discord.utils.get(guild.roles, name='Active')
+                        if active_role:
+                            threshold = settings.get('messages_threshold', 10)
+                            for member in active_role.members:
+                                if not member.bot:
+                                    activity = await self.activity_tracker.get_member_activity(
+                                        guild.id, member.id, days=30
+                                    )
+                                    await self.warning_system.check_warning_needed(
+                                        guild, member, activity, threshold
+                                    )
         except Exception as e:
             self.logger.error(f"Error in check_activity: {e}")
     
