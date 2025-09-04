@@ -193,7 +193,7 @@ class SetupCommands(SlashCommandBase):
                 if tz_lines:
                     embed.add_field(name="🕐 Timezone Channels", value="\n".join(tz_lines), inline=False)
             
-            # Show engagement channels (welcome and introductions)
+            # Show engagement channels (welcome, introductions, and engagement log)
             engagement_lines = []
             
             # Get welcome channel
@@ -209,6 +209,13 @@ class SetupCommands(SlashCommandBase):
                 intro_channel = interaction.guild.get_channel(int(intro_channel_id))
                 if intro_channel:
                     engagement_lines.append(f"💬 Introductions: {intro_channel.mention}")
+            
+            # Get engagement log channel
+            engagement_log_id = await self.bot.db.get_setting(guild_id, 'engagement_log_channel_id')
+            if engagement_log_id:
+                engagement_log_channel = interaction.guild.get_channel(int(engagement_log_id))
+                if engagement_log_channel:
+                    engagement_lines.append(f"📝 Engagement Log: {engagement_log_channel.mention}")
             
             if engagement_lines:
                 embed.add_field(name="🤝 Engagement Channels", value="\n".join(engagement_lines), inline=False)
@@ -249,6 +256,12 @@ class SetupCommands(SlashCommandBase):
                 feature_list.append("✅ Engagement Tracking")
             if features.get('market'):
                 feature_list.append("✅ Market Events")
+            
+            # Get market_display_enabled separately since it might not be in features dict
+            market_display = await self.bot.db.get_setting(guild_id, 'market_display_enabled')
+            if market_display == 'True' or market_display == 'true':
+                feature_list.append("✅ Market Display Channels")
+                
             if features.get('funding'):
                 feature_list.append("✅ Funding Alerts")
             if features.get('volatility'):
@@ -264,10 +277,41 @@ class SetupCommands(SlashCommandBase):
             # Show engagement details if enabled
             if features.get('engagement'):
                 eng_details = []
-                if settings.get('messages_threshold'):
-                    eng_details.append(f"Messages Required: **{settings['messages_threshold']}**")
-                if settings.get('days_threshold'):
-                    eng_details.append(f"Days Lookback: **{settings['days_threshold']}**")
+                
+                # Get all engagement settings
+                messages_threshold = settings.get('messages_threshold')
+                days_threshold = settings.get('days_threshold')
+                active_days_threshold = await self.bot.db.get_setting(guild_id, 'active_days_threshold')
+                warning_days = await self.bot.db.get_setting(guild_id, 'warning_days')
+                warning_min_messages = await self.bot.db.get_setting(guild_id, 'warning_min_messages')
+                dm_warnings = await self.bot.db.get_setting(guild_id, 'dm_warnings')
+                enforce_engagement = await self.bot.db.get_setting(guild_id, 'enforce_engagement')
+                
+                # Activity requirements
+                if messages_threshold:
+                    eng_details.append(f"Messages Required: **{messages_threshold}**")
+                if days_threshold:
+                    eng_details.append(f"Days Lookback: **{days_threshold}**")
+                if active_days_threshold:
+                    eng_details.append(f"Active Days Required: **{active_days_threshold}**")
+                
+                # Enforcement status
+                if enforce_engagement == 'true':
+                    eng_details.append(f"⚖️ **Enforcement: ENABLED** (roles will be removed)")
+                else:
+                    eng_details.append(f"🛡️ **Enforcement: DISABLED** (tracking only)")
+                
+                # Warning settings (only show if enforcement is enabled)
+                if enforce_engagement == 'true':
+                    if warning_days:
+                        eng_details.append(f"Warning Period: **{warning_days} days**")
+                    if warning_min_messages:
+                        eng_details.append(f"Warning Threshold: **{warning_min_messages} messages**")
+                    if dm_warnings == 'true':
+                        eng_details.append(f"DM Warnings: **Enabled**")
+                    else:
+                        eng_details.append(f"DM Warnings: **Disabled**")
+                
                 if eng_details:
                     embed.add_field(name="👥 Engagement Settings", value="\n".join(eng_details), inline=False)
             
