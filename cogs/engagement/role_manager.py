@@ -137,13 +137,17 @@ class RoleManager:
                         logger.info(f"Granted Active role to {member.name} ({msg_count} msgs, {active_days} active days)")
                 elif msg_count > 0:
                     # Has Member role but doesn't qualify for Active anymore
-                    # Only remove roles if enforcement is enabled
+                    # Only remove roles if enforcement is enabled AND member has been here long enough
                     if active_role in member.roles and enforce_engagement:
-                        await member.remove_roles(active_role)
-                        if active_days_threshold:
-                            logger.info(f"Removed Active role from {member.name} ({msg_count} msgs, {active_days} active days)")
+                        # Only enforce if member has been in guild for at least the lookback period
+                        if days_in_guild >= days_threshold:
+                            await member.remove_roles(active_role)
+                            if active_days_threshold:
+                                logger.info(f"Removed Active role from {member.name} ({msg_count} msgs, {active_days} active days)")
+                            else:
+                                logger.info(f"Removed Active role from {member.name} ({msg_count} msgs)")
                         else:
-                            logger.info(f"Removed Active role from {member.name} ({msg_count} msgs)")
+                            logger.debug(f"Skipping enforcement for {member.name} - only been in guild {days_in_guild} days (need {days_threshold})")
                     elif active_role in member.roles and not enforce_engagement:
                         logger.debug(f"Would remove Active role from {member.name} but enforcement is disabled")
                 

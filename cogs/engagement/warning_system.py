@@ -56,6 +56,17 @@ class WarningSystem:
                 logger.debug(f"Skipping warning for {member.name} - enforcement disabled")
                 return
             
+            # Get the lookback period
+            engagement_settings = await self.bot.db.get_engagement_settings(guild.id)
+            days_threshold = engagement_settings.get('days_threshold', 30) if engagement_settings else 30
+            
+            # Check how long member has been in the guild
+            if member.joined_at:
+                days_in_guild = (datetime.utcnow() - member.joined_at).days
+                if days_in_guild < days_threshold:
+                    logger.debug(f"Skipping warning for {member.name} - only been in guild {days_in_guild} days (need {days_threshold})")
+                    return
+            
             # Get warning settings
             settings = await self.get_warning_settings(guild.id)
             
