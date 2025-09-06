@@ -43,22 +43,48 @@ class AdminManager:
             sorted_stats = sorted_stats[:limit]
         
         lines = []
+        current_time = datetime.now(timezone.utc)
+        
         for i, stat in enumerate(sorted_stats, 1):
             member = guild.get_member(stat['user_id'])
             if member:
                 active_days = stat.get('active_days', 0)
-                lines.append(f"{i}. **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days")
+                
+                # Calculate days since joined
+                if member.joined_at:
+                    days_in_guild = (current_time - member.joined_at).days
+                    
+                    # Show special indicator for new members (joined within lookback period)
+                    if days_in_guild < lookback_days:
+                        # Show how many days they've been here
+                        lines.append(f"{i}. **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days 🆕 *(joined {days_in_guild}d ago)*")
+                    else:
+                        # For established members, just show activity
+                        lines.append(f"{i}. **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days")
+                else:
+                    # No join date available
+                    lines.append(f"{i}. **{member.display_name}** - {stat['total_messages']} msgs, {active_days} days")
         
-        # Get message threshold for active status
+        # Get thresholds for active status
         messages_threshold = settings.get('messages_threshold', 10) if settings else 10
+        active_days_threshold = settings.get('active_days_threshold', None) if settings else None
         
-        total_active = sum(1 for s in stats if s['total_messages'] >= messages_threshold)
+        # Count members who meet ALL active criteria
+        if active_days_threshold:
+            total_active = sum(1 for s in stats 
+                             if s['total_messages'] >= messages_threshold 
+                             and s.get('active_days', 0) >= active_days_threshold)
+            footer_text = f"{total_active}/{len(stats)} active ({messages_threshold}+ msgs, {active_days_threshold}+ active days in {lookback_days} days)"
+        else:
+            total_active = sum(1 for s in stats if s['total_messages'] >= messages_threshold)
+            footer_text = f"{total_active}/{len(stats)} active ({messages_threshold}+ msgs in {lookback_days} days)"
+        
         embed = discord.Embed(
             title=f"📊 Activity Analysis (Last {lookback_days} Days)",
             description="\n".join(lines) if lines else "No data",
             color=discord.Color.blue()
         )
-        embed.set_footer(text=f"{total_active}/{len(stats)} active ({messages_threshold}+ msgs in {lookback_days} days)")
+        embed.set_footer(text=footer_text)
         return embed
     
     async def get_active_members(self, guild: discord.Guild, limit: int = 10) -> discord.Embed:

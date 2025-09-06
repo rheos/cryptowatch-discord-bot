@@ -28,6 +28,22 @@ class WelcomeHandler:
             
             newmember_role = discord.utils.get(guild.roles, name=self.NEWMEMBER_ROLE)
             
+            # Record member join in database with actual join date
+            try:
+                async with self.bot.db.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        # Use member.joined_at for the actual join timestamp
+                        await cursor.execute("""
+                            INSERT INTO member_status (guild_id, user_id, joined_at)
+                            VALUES (%s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                                joined_at = COALESCE(joined_at, VALUES(joined_at))
+                        """, (guild.id, member.id, member.joined_at))
+                        await conn.commit()
+                        logger.info(f"Recorded join date for {member.name}")
+            except Exception as e:
+                logger.error(f"Error recording member join date: {e}")
+            
             if newmember_role:
                 await member.add_roles(newmember_role)
                 logger.info(f"Added NewMember role to {member.name}")

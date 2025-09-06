@@ -24,6 +24,15 @@ discord-bot/
 ├── database.py                 # Database connection manager - USE THIS, DON'T CREATE NEW
 ├── config.*.json              # Config files per environment (dev/prod)
 │
+├── migrations/                # Database migrations - RUN IN ORDER
+│   ├── 001_complete_schema.py # Initial schema (base state)
+│   ├── 002_migrate_config.py  # Config data migration  
+│   ├── 003_add_settings_registry.py # Settings registry system
+│   ├── 004_add_active_days.py # Active days threshold
+│   ├── 005_add_warning_settings.py # Warning system config
+│   ├── 006_add_market_channels.py # Market display channels
+│   └── 007_add_enforce_engagement.py # Latest: enforcement toggle & log channel
+│
 ├── cogs/                      # Discord bot functionality
 │   ├── engagement_cog.py     # Orchestrates engagement modules ONLY
 │   ├── engagement/           # Modular engagement system
@@ -84,7 +93,14 @@ discord-bot/
 - **Connection Pool**: `database.py` - USE `self.bot.db` 
 - **Engagement Stats**: `self.bot.db.get_member_stats()`
 - **Settings**: `self.bot.db.get_setting()` / `set_setting()`
+- **Settings Registry**: All settings must be registered in `settings_registry` table
+  - Settings must have valid `section_id` from `settings_sections` table
+  - New settings require migration to add to registry
+- **Migrations**: Use numbered migration files in `/migrations/`
+  - Migrations receive cursor object, NOT pool
+  - Run in order: 001 → 002 → ... → 007 (latest)
 - **DO NOT**: Create new database connections or pools
+- **DO NOT**: Modify database directly - use migrations
 
 ### API Endpoints (Web App)
 Located in `/cryptowatchtools/app/routes/api/`:
@@ -110,9 +126,13 @@ Accessed through `/admin` command - all member management in one place:
 
 **Supporting Modules:**
 - **role_manager.py**: 
-  - `update_member_roles()` - Update all member roles
-  - `handle_new_member_message()` - Check for intro channel upgrade
+  - `update_member_roles()` - Update all member roles based on activity
+  - `handle_new_member_message()` - Check for intro channel upgrade (50+ chars)
   - `grant_vacation_role()` - Vacation role management
+  - `manually_grant_active()` - Admin override to grant Active role
+  - **Enforcement**: Only removes roles if `enforce_engagement=true`
+  - **Grace Period**: Won't remove roles from members who joined < lookback days ago
+  - **Pro-rating**: New members get proportionally reduced thresholds (min 25% of full)
   
 - **activity_tracker.py**:
   - `track_message()` - Buffer message counts
@@ -123,12 +143,26 @@ Accessed through `/admin` command - all member management in one place:
 
 - **warning_system.py**:
   - `check_warning_needed()` - Check if warning needed
-  - `send_warning()` - Send warning to member
-  - `test_warning()` - Test warning on member
+  - `send_warning()` - Send warning DM to member
+  - `test_warning()` - Test warning on specific member
+  - **Only Active When**:
+    - `engagement_enabled=true` (tracking enabled)
+    - `enforce_engagement=true` (enforcement enabled)  
+    - `warning_dm_enabled=true` (DMs enabled)
+  - **Grace Period**: Won't warn members who joined < lookback days ago
+  - **Warning Window**: Warns members with < warning_min_messages in last warning_days
 
 - **welcome_handler.py**:
-  - `handle_member_join()` - Welcome new members
-  - `send_welcome_message()` - Send welcome embed
+  - `handle_member_join()` - Welcome new members with NewMember role
+  - `send_welcome_message()` - Send welcome embed with intro instructions
+  - **Channel Resolution** (in order):
+    1. Database: `welcome_channel_id` setting
+    2. Name search: First channel containing 'welcome'
+    3. Silent fail if no channel found
+  - **Intro Channel** (for mention in welcome):
+    1. Database: `introductions_channel_id` setting  
+    2. Name search: First channel containing 'introductions'
+    3. Generic message if no channel found
 
 #### Crypto Features (`/price`, `/funding`, `/volatility`)
 - **crypto_data_cog.py**: Main crypto data handling
@@ -172,11 +206,53 @@ All in `/cogs/slash_commands/`:
 - **Switching**: `python switch_env.py dev|prod`
 
 ### Database Settings
-Most settings now in database via `/setup config`:
-- Engagement thresholds
-- Warning settings  
-- Channel configurations
-- Feature toggles
+Most settings now in database via `/setup` commands:
+
+**Engagement Settings** (`/setup engagement`):
+- `messages_threshold`: Min messages required for Active role (default: 10)
+- `days_threshold`: Lookback period in days (default: 30)
+- `active_days_threshold`: Min days with messages (optional)
+- `enforce_engagement`: Enable role removal/warnings (default: false)
+
+**Warning Settings** (`/setup warnings`):
+- `warning_days`: Days to check for warning trigger (default: 14)
+- `warning_min_messages`: Min messages to avoid warning (default: 5)
+- `warning_dm_enabled`: Send warning DMs (default: true)
+
+**Channel Settings** (`/setup channels`):
+- `welcome_channel_id`: Where to send welcome messages
+- `introductions_channel_id`: Where new members introduce themselves
+- `engagement_log_channel_id`: Activity logs and role changes
+- Market display channels (btc_price, funding_rates, etc.)
+
+**Feature Toggles** (`/setup features`):
+- `engagement_enabled`: Master engagement toggle
+- `market_enabled`: Market price displays
+- `volatility_scanner_enabled`: Volatility tracking
+- Various other features
+
+#### Engagement System Modes
+1. **Disabled** (`engagement_enabled=false`): 
+   - No tracking, no roles, no warnings
+   - NewMember → Member upgrade still works in intro channel
+   
+2. **Tracking Only** (`engagement_enabled=true`, `enforce_engagement=false`):
+   - Tracks all message activity
+   - Grants Active role to qualifying members
+   - NewMember → Member → Active progression works
+   - **NO role removal** - once Active, always Active (unless manually removed)
+   - **NO warning messages** sent to inactive members
+   - Safe for testing thresholds without consequences
+   
+3. **Full Enforcement** (`engagement_enabled=true`, `enforce_engagement=true`):
+   - All tracking features active
+   - Removes Active role from inactive members
+   - Sends warnings before role removal (if warning_dm_enabled)
+   - **Grace Period Protection**:
+     - New members (< lookback period in guild) are NOT subject to enforcement
+     - Roles won't be removed until member has been in guild >= lookback days
+     - Warnings won't be sent to members in grace period
+   - Vacation role exempts members from enforcement
 
 ### Environment Variables (Docker)
 Set in `docker-compose.yml`:

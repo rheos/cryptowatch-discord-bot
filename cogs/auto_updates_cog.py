@@ -17,9 +17,9 @@ class AutoUpdatesCog(commands.Cog):
         self.api_base = "https://example.com/api"
         self.session = None
         
-        # Get update channels from config
-        self.funding_channel_id = config.get("auto_update_channels", {}).get("funding")
-        self.alerts_channel_id = config.get("auto_update_channels", {}).get("alerts")
+        # Channel IDs will be loaded from database in cog_load
+        self.funding_channel_id = None
+        self.alerts_channel_id = None
         
         # Track last rates snapshot to detect changes
         self.last_rates_snapshot = {}  # {symbol: rate} to detect rate changes
@@ -29,15 +29,37 @@ class AutoUpdatesCog(commands.Cog):
         
         # Track funding flip alerts to prevent duplicates
         self.recent_flip_alerts = {}  # {symbol: (change_value, alert_time)}
-        
-        # Start scheduled tasks if channels are configured
-        if self.funding_channel_id:
-            self.update_funding_summary.start()
-        if self.alerts_channel_id:
-            self.check_extreme_rates.start()
     
     async def cog_load(self):
         self.session = aiohttp.ClientSession()
+        
+        # Start the tasks - they'll load channels when ready
+        self.update_funding_summary.start()
+        self.check_extreme_rates.start()
+        logger.info("AutoUpdatesCog initialized, tasks will load channels when bot is ready")
+    
+    async def load_channels_from_db(self):
+        """Load channel IDs from database after bot is ready"""
+        # Get channel IDs from database for the first guild
+        # (This assumes single-guild bot, for multi-guild would need to iterate)
+        if self.bot.guilds:
+            guild = self.bot.guilds[0]
+            
+            # Get funding alerts channel
+            funding_channel_id = await self.bot.db.get_setting(guild.id, 'funding_alerts')
+            if funding_channel_id:
+                self.funding_channel_id = int(funding_channel_id)
+                logger.info(f"Funding alerts channel configured: {self.funding_channel_id}")
+            else:
+                logger.info("No funding alerts channel configured in database")
+            
+            # Get general alerts channel  
+            alerts_channel_id = await self.bot.db.get_setting(guild.id, 'general_alerts')
+            if alerts_channel_id:
+                self.alerts_channel_id = int(alerts_channel_id)
+                logger.info(f"General alerts channel configured: {self.alerts_channel_id}")
+            else:
+                logger.info("No general alerts channel configured in database")
     
     async def cog_unload(self):
         self.update_funding_summary.cancel()
@@ -320,10 +342,16 @@ class AutoUpdatesCog(commands.Cog):
     @update_funding_summary.before_loop
     async def before_funding_summary(self):
         await self.bot.wait_until_ready()
+        # Load channels on first run
+        if self.funding_channel_id is None:
+            await self.load_channels_from_db()
     
     @check_extreme_rates.before_loop
     async def before_extreme_check(self):
         await self.bot.wait_until_ready()
+        # Load channels on first run  
+        if self.alerts_channel_id is None:
+            await self.load_channels_from_db()
 
 async def setup(bot):
     pass

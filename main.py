@@ -121,7 +121,14 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(MarketEventsCog(self, self.config))
         await self.add_cog(MarketDisplayCog(self, self.config))
         await self.add_cog(CryptoDataCog(self, self.config))
-        await self.add_cog(AutoUpdatesCog(self, self.config))
+        
+        # Load AutoUpdatesCog with error handling
+        try:
+            await self.add_cog(AutoUpdatesCog(self, self.config))
+            self.logger.info("AutoUpdatesCog loaded successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to load AutoUpdatesCog: {e}", exc_info=True)
+        
         await self.add_cog(VolatilityCog(self, self.config))
         await self.add_cog(EngagementCog(self, self.config))
         await self.add_cog(AIChatCog(self, self.config))

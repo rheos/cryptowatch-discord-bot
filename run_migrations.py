@@ -87,12 +87,18 @@ def run_migration(connection, filepath, version):
                 asyncio.set_event_loop(loop)
                 
                 sync_cursor = SyncCursor(cursor)
-                loop.run_until_complete(migration.up(sync_cursor))
-                loop.close()
-                
-                connection.commit()
-                logger.info(f"✓ Migration {version} completed")
-                return True
+                try:
+                    loop.run_until_complete(migration.up(sync_cursor))
+                    # Only commit if no exceptions were raised
+                    connection.commit()
+                    logger.info(f"✓ Migration {version} completed successfully")
+                    return True
+                except Exception as migration_error:
+                    logger.error(f"❌ Migration {version} failed during execution: {migration_error}")
+                    connection.rollback()
+                    return False
+                finally:
+                    loop.close()
                 
         except Exception as e:
             logger.error(f"❌ Migration {version} failed: {e}")
@@ -197,13 +203,23 @@ def main():
         logger.info(f"Pending migrations: {[v for v, _ in pending]}")
         
         # Run pending migrations
+        failed_migrations = []
         for version, filepath in pending:
             if not run_migration(connection, filepath, version):
-                sys.exit(1)
+                failed_migrations.append(version)
+                logger.error(f"❌ Migration {version} failed - stopping migration process")
+                break  # Stop on first failure
         
-        logger.info("\n" + "=" * 60)
-        logger.info("✅ ALL MIGRATIONS COMPLETED SUCCESSFULLY!")
-        logger.info("=" * 60)
+        if failed_migrations:
+            logger.error("\n" + "=" * 60)
+            logger.error(f"❌ MIGRATION FAILED: Migration {failed_migrations[0]} encountered an error")
+            logger.error("Please fix the migration and try again")
+            logger.error("=" * 60)
+            sys.exit(1)
+        else:
+            logger.info("\n" + "=" * 60)
+            logger.info("✅ ALL MIGRATIONS COMPLETED SUCCESSFULLY!")
+            logger.info("=" * 60)
         
     finally:
         connection.close()

@@ -103,6 +103,76 @@ class EngagementCog(commands.Cog):
         await self.welcome_handler.handle_member_join(member)
     
     @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        """Handle member leaves/kicks/bans"""
+        try:
+            guild = member.guild
+            
+            # Record member leave in database
+            async with self.bot.db.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # Update left_at timestamp
+                    await cursor.execute("""
+                        UPDATE member_status 
+                        SET left_at = NOW()
+                        WHERE guild_id = %s AND user_id = %s
+                    """, (guild.id, member.id))
+                    
+                    await conn.commit()
+                    logger.info(f"Recorded leave for {member.name} from {guild.name}")
+                    
+            # Send private notification to guild owner
+            try:
+                owner = guild.owner
+                if owner:
+                    embed = discord.Embed(
+                        title=f"👋 Member Left {guild.name}",
+                        description=f"**{member.display_name}** ({member.mention}) has left the server",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Get their activity stats before they left
+                    stats = await self.activity_tracker.get_member_activity(guild.id, member.id, 30)
+                    if stats and stats['messages'] > 0:
+                        embed.add_field(
+                            name="Recent Activity (30 days)",
+                            value=f"Messages: {stats['messages']}\nActive Days: {stats.get('active_days', 0)}",
+                            inline=True
+                        )
+                    
+                    # Show how long they were in the guild
+                    if member.joined_at:
+                        days_in_guild = (datetime.utcnow() - member.joined_at).days
+                        embed.add_field(
+                            name="Time in Server",
+                            value=f"{days_in_guild} days",
+                            inline=True
+                        )
+                    
+                    # Show their roles
+                    roles = [r.name for r in member.roles if r.name != "@everyone"]
+                    if roles:
+                        embed.add_field(
+                            name="Roles",
+                            value=", ".join(roles),
+                            inline=False
+                        )
+                    
+                    embed.set_footer(text="This notification is only sent to you as the server owner")
+                    
+                    try:
+                        await owner.send(embed=embed)
+                        logger.info(f"Sent leave notification to {owner.name} about {member.name}")
+                    except discord.Forbidden:
+                        logger.warning(f"Could not DM {owner.name} about member leave (DMs disabled)")
+            except Exception as e:
+                logger.error(f"Error sending leave notification: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error handling member leave: {e}", exc_info=True)
+    
+    @commands.Cog.listener()
     async def on_message(self, message):
         """Track member messages for engagement"""
         if message.author.bot or message.content.startswith('!'):
