@@ -134,16 +134,51 @@ class SetupCommands(SlashCommandBase):
         
         return choices[:25]
     
+    async def alert_type_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete for alert types including dynamic signal sources"""
+        choices = []
+
+        # Add static alert types
+        static_alerts = [
+            ("Market Events", "market_events"),
+            ("Funding Rates", "funding"),
+            ("General Alerts", "alerts"),
+        ]
+
+        for name, value in static_alerts:
+            if current.lower() in name.lower():
+                choices.append(app_commands.Choice(name=name, value=value))
+
+        # Fetch signal sources from API
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get("http://app:5173/api/signals/sources?active_only=true") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        sources = data.get("sources", [])
+
+                        for source in sources:
+                            source_name = f"📡 {source.get('name', source['source_id'])}"
+                            source_value = f"signal_{source['source_id']}"
+
+                            if current.lower() in source_name.lower():
+                                choices.append(app_commands.Choice(name=source_name, value=source_value))
+        except Exception as e:
+            logger.error(f"Error fetching signal sources for autocomplete: {e}")
+
+        return choices[:25]  # Discord limit
+
     @app_commands.command(name="setup_alerts", description="Configure alert channels")
     @app_commands.describe(
         channel="Text channel for alerts",
         alert_type="Type of alerts for this channel"
     )
-    @app_commands.choices(alert_type=[
-        app_commands.Choice(name="Market Events", value="market_events"),
-        app_commands.Choice(name="Funding Rates", value="funding"),
-        app_commands.Choice(name="General Alerts", value="alerts"),
-    ])
+    @app_commands.autocomplete(alert_type=alert_type_autocomplete)
     @app_commands.default_permissions(administrator=True)
     async def setup_alerts_command(self, interaction: discord.Interaction,
                                   channel: discord.TextChannel,
@@ -563,39 +598,140 @@ class SetupCommands(SlashCommandBase):
                                   channel: discord.TextChannel,
                                   alert_type: str):
         """Setup alert channel"""
-        # Map alert types to setting keys
-        setting_map = {
-            'market_events': 'market_alerts',  # Note: might not exist yet
-            'funding': 'funding_alerts',
-            'alerts': 'general_alerts'
-        }
-        
-        setting_key = setting_map.get(alert_type, alert_type)
-        
+        # Check if this is a signal source configuration
+        if alert_type.startswith('signal_'):
+            # Extract source_id from alert_type (remove 'signal_' prefix)
+            source_id = alert_type.replace('signal_', '')
+
+            # Try to get the display name from the API
+            display_name = source_id.replace('_', ' ').title()  # Default fallback
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("http://app:5173/api/signals/sources?active_only=true") as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            sources = data.get("sources", [])
+                            for source in sources:
+                                if source['source_id'] == source_id:
+                                    display_name = source.get('name', display_name)
+                                    break
+            except Exception as e:
+                logger.error(f"Error fetching signal source name: {e}")
+
+            # Get current signal channels mapping or create new one
+            import json
+            current_mappings_str = await self.bot.db.get_setting(interaction.guild_id, 'signal_channels')
+
+            if current_mappings_str:
+                try:
+                    current_mappings = json.loads(current_mappings_str)
+                except:
+                    current_mappings = {}
+            else:
+                current_mappings = {}
+
+            # Add/update the mapping for this signal source
+            current_mappings[source_id] = str(channel.id)
+
+            # Save the updated mappings
+            setting_key = 'signal_channels'
+            success = await self.bot.db.set_setting(
+                interaction.guild_id,
+                'signal_channels',
+                json.dumps(current_mappings)
+            )
+
+            if success:
+                # Enable signals for the guild if not already enabled
+                await self.bot.db.set_setting(interaction.guild_id, 'signals_enabled', True)
+            else:
+                # Fallback: setting might not exist, return error
+                success = False
+        else:
+            # Map alert types to setting keys
+            setting_map = {
+                'market_events': 'market_alerts',  # Note: might not exist yet
+                'funding': 'funding_alerts',
+                'alerts': 'general_alerts'
+            }
+
+            setting_key = setting_map.get(alert_type, alert_type)
+
+            channel_names = {
+                'market_events': 'Market Events',
+                'funding': 'Funding Rates',
+                'alerts': 'General Alerts'
+            }
+            display_name = channel_names.get(alert_type, alert_type)
+
         # Store in guild_settings
         success = await self.bot.db.set_setting(
             interaction.guild_id,
             setting_key,
             str(channel.id)
         )
-        
+
         if not success:
             await interaction.followup.send(f"❌ Failed to configure {alert_type} channel - setting may not be registered")
             return
-        
-        channel_names = {
-            'market_events': 'Market Events',
-            'funding': 'Funding Rates', 
-            'alerts': 'General Alerts'
-        }
-        
+
         embed = discord.Embed(
-            title=f"✅ {channel_names.get(alert_type, alert_type)} Channel Configured",
-            description=f"{channel.mention} will receive {channel_names.get(alert_type, alert_type).lower()} updates",
+            title=f"✅ {display_name} Channel Configured",
+            description=f"{channel.mention} will receive {display_name.lower()} updates",
             color=discord.Color.green()
         )
+
+        # Add extra info for signal sources
+        if alert_type.startswith('signal_'):
+            embed.add_field(
+                name="📡 Signal Processing Enabled",
+                value="TradingView signals will now be distributed to your configured channels.",
+                inline=False
+            )
+
         await interaction.followup.send(embed=embed)
     
+    async def _ensure_signal_setting_registered(self, setting_key: str, display_name: str):
+        """Ensure a signal source setting is registered in the settings_registry"""
+        try:
+            async with self.bot.db.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # Check if setting already exists
+                    await cursor.execute(
+                        "SELECT setting_id FROM settings_registry WHERE setting_key = %s",
+                        (setting_key,)
+                    )
+                    if await cursor.fetchone():
+                        return  # Setting already exists
+
+                    # Get the alerts section id
+                    await cursor.execute(
+                        "SELECT section_id FROM settings_sections WHERE section_key = 'alerts'"
+                    )
+                    row = await cursor.fetchone()
+                    if not row:
+                        logger.error("Alerts section not found in settings_sections")
+                        return
+
+                    section_id = row[0]
+
+                    # Register the new setting
+                    await cursor.execute("""
+                        INSERT INTO settings_registry
+                        (setting_key, setting_type, default_value, description, section_id, display_order, is_advanced)
+                        VALUES (%s, 'string', NULL, %s, %s, 100, 0)
+                    """, (
+                        setting_key,
+                        f"Channel for {display_name} signals",
+                        section_id
+                    ))
+                    await conn.commit()
+                    logger.info(f"Registered new signal setting: {setting_key}")
+
+        except Exception as e:
+            logger.error(f"Error registering signal setting {setting_key}: {e}")
+
     async def _handle_toggle_market_display(self, interaction: discord.Interaction):
         """Toggle market display feature on/off"""
         guild_id = interaction.guild_id

@@ -132,6 +132,14 @@ class CryptoWatchBot(commands.Bot):
         await self.add_cog(VolatilityCog(self, self.config))
         await self.add_cog(EngagementCog(self, self.config))
         await self.add_cog(AIChatCog(self, self.config))
+
+        # Load TradingView signals cog
+        try:
+            from cogs.tradingview_signals_cog import TradingViewSignalsCog
+            await self.add_cog(TradingViewSignalsCog(self))
+            self.logger.info("TradingViewSignalsCog loaded successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to load TradingViewSignalsCog: {e}", exc_info=True)
         # Load modular slash commands
         from cogs.slash_commands import CryptoCommands, UserCommands
         from cogs.slash_commands.admin_commands import AdminCommands
