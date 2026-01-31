@@ -46,7 +46,7 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     
     # Set up separate loggers for each cog with their own files
-    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands', 'market_display', 'volatility']
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands', 'market_display', 'volatility', 'tradingview_signals']
     for cog_name in cog_loggers:
         cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
         cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging

@@ -387,7 +387,7 @@ class VolatilityCog(commands.Cog):
             try:
                 logger.debug(f"Starting cleanup of messages older than 4 hours in #{channel.name}")
                 deleted = await cleanup_before_send(channel, max_age_hours=4, bot_id=self.bot.user.id)
-                if deleted > 0:
+                if deleted and deleted > 0:
                     logger.info(f"Cleaned up {deleted} old volatility alert messages")
                 else:
                     logger.debug("No old volatility messages to clean up")

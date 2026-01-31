@@ -12,7 +12,7 @@ class TradingViewSignalsCog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.api_base_url = "http://app:5173/api"  # Use Docker service name
+        self.api_base_url = bot.config.get('api_base_url', 'https://example.com/api')
         self.poll_signals_task.start()
         logger.info("TradingView signals cog initialized")
 
