@@ -24,6 +24,7 @@ class VolatilityCog(commands.Cog):
         self.session = None
         self.sent_alerts = {}  # Track alerts: {symbol: highest_timeframe_hours}
         self.volatility_alerts.start()
+        logger.info("VolatilityCog initialized and alert loop started")
         
     def cog_unload(self):
         self.volatility_alerts.cancel()
@@ -248,9 +249,12 @@ class VolatilityCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def volatility_alerts(self):
         """Check for extreme volatility and send alerts"""
+        logger.info("Volatility alerts loop running...")
+
         # Get alerts channel from database for first guild (or could iterate all guilds)
         guilds = self.bot.guilds
         if not guilds:
+            logger.warning("No guilds connected - skipping volatility check")
             return
             
         # For now, use first guild - could be enhanced to check all guilds
@@ -258,6 +262,7 @@ class VolatilityCog(commands.Cog):
         alerts_channel_id = await self.bot.db.get_setting(guild.id, 'general_alerts')
         
         if not alerts_channel_id:
+            logger.warning(f"No general_alerts channel configured for guild {guild.id} ({guild.name})")
             return
             
         # Define alert thresholds - matching web app defaults
@@ -271,7 +276,10 @@ class VolatilityCog(commands.Cog):
         
         data = await self.fetch_volatility_data(alert_thresholds)
         if not data or not data.get('success'):
+            logger.warning(f"Failed to fetch volatility data or API returned error")
             return
+
+        logger.debug(f"Received volatility data with {len(data.get('thresholds', []))} timeframes")
             
         channel_id = int(alerts_channel_id)
         channel = self.bot.get_channel(channel_id)
@@ -371,8 +379,9 @@ class VolatilityCog(commands.Cog):
                 )
             
             embed.set_footer(text="Price movements exceeding configured thresholds")
-            
+
             await channel.send(embed=embed)
+            logger.info(f"Sent volatility alert with {len(alerts[:5])} coins to #{channel.name}")
             
             # Clean up old messages after sending new alert
             try:
@@ -393,7 +402,9 @@ class VolatilityCog(commands.Cog):
                         'timeframe_hours': alert['timeframe_hours'],
                         'timestamp': current_time.timestamp()
                     }
-    
+        else:
+            logger.debug("No coins exceeded volatility thresholds this cycle")
+
     @volatility_alerts.before_loop
     async def before_volatility_alerts(self):
         await self.bot.wait_until_ready()

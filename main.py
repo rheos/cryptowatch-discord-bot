@@ -46,7 +46,7 @@ def setup_logging():
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     
     # Set up separate loggers for each cog with their own files
-    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands', 'market_display']
+    cog_loggers = ['timezone', 'market-events', 'crypto', 'auto-updates', 'engagement', 'ai_chat', 'crypto_commands', 'slash_commands', 'market_display', 'volatility']
     for cog_name in cog_loggers:
         cog_logger = logging.getLogger(f'discord-bot.{cog_name}')
         cog_logger.setLevel(logging.DEBUG)  # More verbose for debugging
@@ -129,7 +129,11 @@ class CryptoWatchBot(commands.Bot):
         except Exception as e:
             self.logger.error(f"Failed to load AutoUpdatesCog: {e}", exc_info=True)
         
-        await self.add_cog(VolatilityCog(self, self.config))
+        try:
+            await self.add_cog(VolatilityCog(self, self.config))
+            self.logger.info("VolatilityCog loaded successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to load VolatilityCog: {e}", exc_info=True)
         await self.add_cog(EngagementCog(self, self.config))
         await self.add_cog(AIChatCog(self, self.config))
 
