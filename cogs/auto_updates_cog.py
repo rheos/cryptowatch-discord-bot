@@ -121,9 +121,10 @@ class AutoUpdatesCog(commands.Cog):
                     
                     rates = rates[:20]
                     
+                    update_time = datetime.utcnow().strftime('%H:%M UTC')
                     embed = discord.Embed(
                         title="📊 Funding Rate Summary",
-                        description=f"Top 20 negative funding rates at {datetime.utcnow().strftime('%H:%M UTC')}",
+                        description=f"Top 20 negative funding rates\n\n**Last Updated: {update_time}**",
                         color=discord.Color.blue(),
                         timestamp=datetime.utcnow()
                     )

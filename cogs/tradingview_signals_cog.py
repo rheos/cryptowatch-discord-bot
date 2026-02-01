@@ -244,29 +244,31 @@ class TradingViewSignalsCog(commands.Cog):
             if price_value:
                 price = float(price_value)
                 price_label = "📍 Entry Price" if signal.get('entry_price') else "💰 Current Price"
+                price_str = f"${price:.4f}" if price < 1 else f"${price:.2f}"
                 embed.add_field(
                     name=price_label,
-                    value=f"${price:.4f}" if price < 1 else f"${price:.2f}",
+                    value=f"**{price_str}**",
                     inline=True
                 )
 
         # Stop loss
         if signal.get('stop_loss'):
             sl = float(signal['stop_loss'])
+            sl_str = f"${sl:.4f}" if sl < 1 else f"${sl:.2f}"
             embed.add_field(
                 name="🛑 Stop Loss",
-                value=f"${sl:.4f}" if sl < 1 else f"${sl:.2f}",
+                value=f"**{sl_str}**",
                 inline=True
             )
 
         # Take profits
         tp_values = []
         if signal.get('take_profit_1'):
-            tp_values.append(f"TP1: ${float(signal['take_profit_1']):.2f}")
+            tp_values.append(f"**TP1: ${float(signal['take_profit_1']):.2f}**")
         if signal.get('take_profit_2'):
-            tp_values.append(f"TP2: ${float(signal['take_profit_2']):.2f}")
+            tp_values.append(f"**TP2: ${float(signal['take_profit_2']):.2f}**")
         if signal.get('take_profit_3'):
-            tp_values.append(f"TP3: ${float(signal['take_profit_3']):.2f}")
+            tp_values.append(f"**TP3: ${float(signal['take_profit_3']):.2f}**")
 
         if tp_values:
             embed.add_field(
