@@ -628,6 +628,8 @@ class SetupCommands(SlashCommandBase):
             if current_mappings_str:
                 try:
                     current_mappings = json.loads(current_mappings_str)
+                    if not isinstance(current_mappings, dict):
+                        current_mappings = {}  # Reset if not a dict (e.g., corrupted data)
                 except:
                     current_mappings = {}
             else:
