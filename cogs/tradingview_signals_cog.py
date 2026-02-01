@@ -4,6 +4,7 @@ import aiohttp
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
+from utils.message_cleanup import cleanup_old_messages
 
 logger = logging.getLogger('discord-bot.tradingview_signals')
 
@@ -155,6 +156,18 @@ class TradingViewSignalsCog(commands.Cog):
                         embed = self._create_signal_embed(signal)
                         await channel.send(embed=embed)
                         processed_ids.append(signal['id'])
+
+                    # Clean up old signal messages (older than 24 hours)
+                    try:
+                        deleted = await cleanup_old_messages(
+                            channel,
+                            max_age_hours=24,
+                            bot_id=self.bot.user.id
+                        )
+                        if deleted > 0:
+                            logger.info(f"Cleaned up {deleted} old signal messages from #{channel.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup old messages in #{channel.name}: {e}")
 
                 except Exception as e:
                     logger.error(f"Error sending signal to channel {channel_id}: {e}")
