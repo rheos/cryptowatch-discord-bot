@@ -157,7 +157,8 @@ class SetupCommands(SlashCommandBase):
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                async with session.get("http://app:5173/api/signals/sources?active_only=true") as response:
+                api_base = self.bot.config.get('api_base_url', 'https://example.com/api')
+                async with session.get(f"{api_base}/signals/sources?active_only=true") as response:
                     if response.status == 200:
                         data = await response.json()
                         sources = data.get("sources", [])
@@ -608,7 +609,8 @@ class SetupCommands(SlashCommandBase):
             try:
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
-                    async with session.get("http://app:5173/api/signals/sources?active_only=true") as response:
+                    api_base = self.bot.config.get('api_base_url', 'https://example.com/api')
+                async with session.get(f"{api_base}/signals/sources?active_only=true") as response:
                         if response.status == 200:
                             data = await response.json()
                             sources = data.get("sources", [])
