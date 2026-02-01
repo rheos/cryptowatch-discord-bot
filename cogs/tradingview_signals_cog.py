@@ -107,10 +107,11 @@ class TradingViewSignalsCog(commands.Cog):
             async with self.bot.db.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute("""
-                        SELECT DISTINCT guild_id
-                        FROM guild_settings
-                        WHERE setting_key = 'signals_enabled'
-                        AND setting_value = 'true'
+                        SELECT DISTINCT gs.guild_id
+                        FROM guild_settings gs
+                        JOIN settings_registry sr ON gs.setting_id = sr.setting_id
+                        WHERE sr.setting_key = 'signals_enabled'
+                        AND gs.value = 'true'
                     """)
                     rows = await cursor.fetchall()
                     return [row[0] for row in rows]
