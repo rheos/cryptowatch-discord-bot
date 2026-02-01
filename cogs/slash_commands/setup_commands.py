@@ -610,7 +610,7 @@ class SetupCommands(SlashCommandBase):
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
                     api_base = self.bot.config.get('api_base_url', 'https://example.com/api')
-                async with session.get(f"{api_base}/signals/sources?active_only=true") as response:
+                    async with session.get(f"{api_base}/signals/sources?active_only=true") as response:
                         if response.status == 200:
                             data = await response.json()
                             sources = data.get("sources", [])
@@ -667,12 +667,12 @@ class SetupCommands(SlashCommandBase):
             }
             display_name = channel_names.get(alert_type, alert_type)
 
-        # Store in guild_settings
-        success = await self.bot.db.set_setting(
-            interaction.guild_id,
-            setting_key,
-            str(channel.id)
-        )
+            # Store in guild_settings (only for non-signal types)
+            success = await self.bot.db.set_setting(
+                interaction.guild_id,
+                setting_key,
+                str(channel.id)
+            )
 
         if not success:
             await interaction.followup.send(f"❌ Failed to configure {alert_type} channel - setting may not be registered")
