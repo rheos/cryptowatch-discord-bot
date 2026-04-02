@@ -11,6 +11,8 @@ venv/
 config.json
 config.development.json
 config.production.json
+setup-production.sh
+switch_env.sh
 
 # IDE
 .vscode/
