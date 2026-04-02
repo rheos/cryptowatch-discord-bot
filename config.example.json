@@ -1,0 +1,47 @@
+{
+  "bot_token": "your_discord_bot_token_here",
+  "server_name": "DEVELOPMENT",
+  "timezone_channels": [
+    {
+      "timezone": "America/Vancouver",
+      "channel_id": 0
+    }
+  ],
+  "market_event_channel_id": 0,
+  "market_times_message_channel_id": 0,
+  "auto_update_channels": {
+    "funding": 0,
+    "alerts": 0
+  },
+  "api_base_url": "http://app:5173/api",
+  "engagement": {
+    "enabled": true,
+    "roles": {
+      "new_member": "NewMember",
+      "member": "Member",
+      "active": "Active",
+      "vacation": "Vacation"
+    },
+    "thresholds": {
+      "active_messages": 10,
+      "active_days": 30
+    },
+    "channels": {
+      "welcome": "welcome",
+      "welcome_chat": "welcome-chat",
+      "premium_chat": "premium-chat",
+      "advanced_alerts": "advanced-alerts",
+      "research_collab": "research-collab",
+      "early_access": "early-access",
+      "engagement_log": "engagement-log",
+      "engagement_log_id": 0
+    },
+    "warnings": {
+      "enabled": true,
+      "days_before": 7,
+      "dm_enabled": true,
+      "min_messages_warning": 7,
+      "start_after": "2025-01-01"
+    }
+  }
+}

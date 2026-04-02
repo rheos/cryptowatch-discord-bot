@@ -8,6 +8,8 @@ env/
 venv/
 .env
 .env.production
+config.json
+config.development.json
 config.production.json
 
 # IDE
