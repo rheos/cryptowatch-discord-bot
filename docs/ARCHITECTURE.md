@@ -23,15 +23,19 @@ discord-bot/
 ├── main.py                     # Bot entry point - DO NOT DUPLICATE BOT INITIALIZATION
 ├── database.py                 # Database connection manager - USE THIS, DON'T CREATE NEW
 ├── config.*.json              # Config files per environment (dev/prod)
+├── config_loader.py           # Config file loading logic
+├── run_migrations.py          # Migration runner script
 │
 ├── migrations/                # Database migrations - RUN IN ORDER
 │   ├── 001_complete_schema.py # Initial schema (base state)
-│   ├── 002_migrate_config.py  # Config data migration  
-│   ├── 003_add_settings_registry.py # Settings registry system
-│   ├── 004_add_active_days.py # Active days threshold
-│   ├── 005_add_warning_settings.py # Warning system config
-│   ├── 006_add_market_channels.py # Market display channels
-│   └── 007_add_enforce_engagement.py # Latest: enforcement toggle & log channel
+│   ├── 002_migrate_config_data.py # Config data migration
+│   ├── 003_add_market_message_id.py # Market message tracking
+│   ├── 004_add_engagement_channels.py # Engagement channel settings
+│   ├── 005_add_market_display_channels.py # Market display channels
+│   ├── 006_add_active_days_threshold.py # Active days threshold
+│   ├── 007_add_enforce_engagement.py # Enforcement toggle & log channel
+│   ├── 008_add_member_left_at.py # Track when members leave
+│   └── 009_add_signal_sources_to_registry.sql # Signal sources (SQL migration)
 │
 ├── cogs/                      # Discord bot functionality
 │   ├── engagement_cog.py     # Orchestrates engagement modules ONLY
@@ -41,34 +45,36 @@ discord-bot/
 │   │   ├── warning_system.py # Warning logic for inactive members
 │   │   └── welcome_handler.py # New member welcome logic
 │   │
+│   ├── admin/                 # Admin business logic
+│   │   └── admin_manager.py  # All admin operations - analysis, member mgmt, backfill
+│   │
 │   ├── slash_commands/        # THIN WRAPPERS - NO BUSINESS LOGIC
 │   │   ├── base.py           # Base class for slash commands
-│   │   ├── admin_commands.py # Admin hub for member management & server admin
+│   │   ├── admin_commands.py # Admin hub - routes to admin_manager.py
 │   │   ├── crypto_commands.py # Routes to crypto data
 │   │   ├── setup_commands.py # Bot setup & configuration
-│   │   └── ai_commands.py    # AI chat interface
+│   │   ├── market_display_commands.py # Market display configuration
+│   │   ├── user_commands.py  # User-facing commands
+│   │   └── utils/            # Slash command helpers
+│   │       ├── db_helpers.py # Database helper functions
+│   │       └── formatters.py # Message formatting utilities
 │   │
 │   ├── crypto_data_cog.py    # Crypto data fetching & caching
 │   ├── timezone_cog.py       # Timezone display in channels
 │   ├── volatility_cog.py     # Volatility scanner
 │   ├── ai_chat_cog.py        # AI chat functionality
-│   └── market_events_cog.py  # Market event tracking
+│   ├── market_events_cog.py  # Market event tracking
+│   ├── market_display_cog.py # Market price/data display in channels
+│   ├── auto_updates_cog.py   # Scheduled crypto updates (funding, alerts)
+│   └── tradingview_signals_cog.py # Polls & distributes TradingView signals
 │
 ├── scripts/                   # STANDALONE SCRIPTS - CALL VIA SUBPROCESS
-│   ├── backfill_engagement.py # ⚠️ USE THIS FOR BACKFILL - DON'T REIMPLEMENT
-│   └── migrate_*.py          # Various migration scripts
+│   └── backfill_engagement.py # ⚠️ USE THIS FOR BACKFILL - DON'T REIMPLEMENT
 │
-├── utils/                     # Shared utilities
-│   ├── crypto_api.py         # API client for crypto data
-│   ├── config_manager.py     # Configuration management
-│   ├── formatters.py         # Message formatting utilities
-│   └── moderation.py         # Moderation utilities (purge, etc.)
-│
-└── pending_delete/           # Files to be removed - DON'T USE THESE
-    ├── engagement_cog_old.py # Old monolithic version
-    ├── admin_commands.py     # Old prefix commands
-    ├── user_commands.py      # Old prefix commands
-    └── engagement_commands.py # Redundant slash command (merged into /admin)
+└── utils/                     # Shared utilities
+    ├── crypto_api.py         # API client for crypto data
+    ├── message_cleanup.py    # Auto-delete old bot messages in channels
+    └── moderation.py         # Moderation utilities (purge, etc.)
 ```
 
 ---
@@ -98,17 +104,15 @@ discord-bot/
   - New settings require migration to add to registry
 - **Migrations**: Use numbered migration files in `/migrations/`
   - Migrations receive cursor object, NOT pool
-  - Run in order: 001 → 002 → ... → 007 (latest)
+  - Run in order: 001 → 002 → ... → 009 (latest)
+  - Note: Migration 009 is SQL format; all others are Python
 - **DO NOT**: Create new database connections or pools
 - **DO NOT**: Modify database directly - use migrations
 
-### API Endpoints (Web App)
-Located in `/cryptowatchtools/app/routes/api/`:
-- `/api/volatility-scanner` - Volatility data
-- `/api/symbol-volatility` - Specific symbol volatility
-- `/api/funding/*` - Funding rate endpoints
-- `/api/market-events` - Market events data
-- **DO NOT**: Create duplicate endpoints in the bot
+### Web App API
+- The bot consumes endpoints from the CryptoWatchTools web app (e.g. volatility, funding, signals)
+- API base URL is configured via `API_BASE_URL` env var (`http://app:5173/api` in Docker)
+- **DO NOT**: Create duplicate endpoints in the bot — use the existing web API
 
 ### Discord Bot Features
 
@@ -170,6 +174,15 @@ Accessed through `/admin` command - all member management in one place:
 - **Price Cache**: Stored in MySQL `price_snapshots` table
 - **Funding Data**: Stored in MySQL `funding_rates` table
 
+#### Auto Updates (scheduled posting)
+- **auto_updates_cog.py**: Posts funding rate updates and alerts to configured channels
+- Uses `message_cleanup.py` to auto-delete old messages before posting new ones
+
+#### TradingView Signals
+- **tradingview_signals_cog.py**: Polls web API for unprocessed TradingView signals every 60s
+- Distributes signals to configured Discord channels
+- Uses `message_cleanup.py` for old message cleanup
+
 #### AI Chat (`/chat`)
 - **ai_chat_cog.py**: OpenAI integration
 - Uses conversation history from database
@@ -181,7 +194,7 @@ Accessed through `/admin` command - all member management in one place:
 
 ### Slash Commands (Modern - PREFERRED)
 All in `/cogs/slash_commands/`:
-- `/admin` - Admin hub for member management and server administration
+- `/admin` - Admin hub (routes to `cogs/admin/admin_manager.py` for business logic)
   - Member activity analysis, role management, engagement settings
   - All member-related administrative functions
 - `/price` - Crypto prices
@@ -189,12 +202,8 @@ All in `/cogs/slash_commands/`:
 - `/volatility` - Volatility scanner
 - `/chat` - AI chat
 - `/setup` - Bot configuration
+- `/market-display` - Market display channel configuration
 - `/purge` - Message deletion (standalone moderation command)
-
-### Prefix Commands (DEPRECATED - BEING REMOVED)
-- **DO NOT CREATE NEW PREFIX COMMANDS**
-- Convert any remaining to slash commands
-- Remove prefix versions after creating slash
 
 ---
 
@@ -203,7 +212,7 @@ All in `/cogs/slash_commands/`:
 ### Environment-Based
 - **Development**: `config.development.json`
 - **Production**: `config.production.json`
-- **Switching**: `python switch_env.py dev|prod`
+- **Switching**: `./switch_env.sh dev|prod`
 
 ### Database Settings
 Most settings now in database via `/setup` commands:
@@ -366,7 +375,9 @@ Each module does ONE thing:
 - **activity_tracker.py**: ONLY activity tracking
 - **warning_system.py**: ONLY warning logic
 - **welcome_handler.py**: ONLY welcome messages
+- **admin_manager.py**: ONLY admin business logic
 - **crypto_api.py**: ONLY external API calls
+- **message_cleanup.py**: ONLY old message cleanup
 - **database.py**: ONLY database operations
 
 ### If a module is doing multiple things: REFACTOR IT
