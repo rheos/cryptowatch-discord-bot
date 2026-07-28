@@ -70,7 +70,7 @@ async def main():
         host=host,
         port=3306,
         user='cwt_user',
-        password=os.getenv('MYSQL_PASSWORD', 'example_password'),
+        password=os.getenv('MYSQL_PASSWORD', ''),
         db='cryptowatch_bot',
         minsize=1,
         maxsize=2

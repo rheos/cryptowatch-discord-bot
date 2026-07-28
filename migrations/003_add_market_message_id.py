@@ -17,7 +17,7 @@ def migrate():
         host=os.getenv('MYSQL_HOST', 'mysql'),
         port=int(os.getenv('MYSQL_PORT', 3306)),
         user=os.getenv('MYSQL_USER', 'cwt_user'),
-        password=os.getenv('MYSQL_PASSWORD', 'example_password'),
+        password=os.getenv('MYSQL_PASSWORD', ''),
         database='cryptowatch_bot',
         charset='utf8mb4',
         cursorclass=DictCursor,

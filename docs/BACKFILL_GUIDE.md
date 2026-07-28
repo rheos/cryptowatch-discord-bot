@@ -29,7 +29,7 @@ Full-featured script with resume capability:
 
 ```bash
 # Run from discord-bot directory
-cd /home/user/Documents/foaftech/webdev/crypto-site/discord-bot
+cd /path/to/discord-bot
 
 # Basic usage (scans all guilds with engagement enabled)
 python3 scripts/backfill_engagement.py

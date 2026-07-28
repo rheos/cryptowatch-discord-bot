@@ -18,7 +18,7 @@ def main():
     db_host = os.environ.get('MYSQL_HOST', 'mysql')
     db_port = int(os.environ.get('MYSQL_PORT', 3306))
     db_user = os.environ.get('MYSQL_USER', 'cwt_user')
-    db_pass = os.environ.get('MYSQL_PASSWORD', 'example_password')
+    db_pass = os.environ.get('MYSQL_PASSWORD', '')
     db_name = 'cryptowatch_bot'
     
     try:
