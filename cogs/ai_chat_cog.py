@@ -127,8 +127,8 @@ class AIChatCog(commands.Cog):
     async def _fetch_price_data(self, symbol: str, date: Optional[str] = None) -> Optional[dict]:
         """Fetch OHLC data for a symbol"""
         try:
-            # API base URL is static - always use production API
-            api_base = 'https://example.com/api'
+            # Read API base from config (Docker: http://app:5173/api, prod: https://cryptowatchtools.com/api)
+            api_base = self.config.get('api_base_url', 'https://cryptowatchtools.com/api')
             url = f"{api_base}/daily-ohlc?symbol={symbol.upper()}"
             if date:
                 url += f"&date={date}"

@@ -18,8 +18,8 @@ class VolatilityCog(commands.Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        # API base URL is static - always use production API
-        api_base = 'https://example.com/api'
+        # Read API base from config (Docker: http://app:5173/api, prod: https://cryptowatchtools.com/api)
+        api_base = config.get('api_base_url', 'https://cryptowatchtools.com/api')
         self.base_url = f"{api_base}/volatility-scanner"
         self.session = None
         self.sent_alerts = {}  # Track alerts: {symbol: highest_timeframe_hours}
