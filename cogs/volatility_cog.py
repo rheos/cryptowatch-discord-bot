@@ -248,6 +248,19 @@ class VolatilityCog(commands.Cog):
     
     @tasks.loop(minutes=5)
     async def volatility_alerts(self):
+        """Run one volatility check per cycle.
+
+        The body is wrapped so a transient error (e.g. a Discord 503 on
+        channel.send, or an API blip) is logged and the loop keeps going.
+        discord.py permanently STOPS a tasks.loop on any unhandled
+        exception, so nothing must be allowed to escape this coroutine.
+        """
+        try:
+            await self._run_volatility_check()
+        except Exception as e:
+            logger.error(f"volatility_alerts cycle failed (loop continues): {e!r}")
+
+    async def _run_volatility_check(self):
         """Check for extreme volatility and send alerts"""
         logger.info("Volatility alerts loop running...")
 
@@ -408,6 +421,16 @@ class VolatilityCog(commands.Cog):
     @volatility_alerts.before_loop
     async def before_volatility_alerts(self):
         await self.bot.wait_until_ready()
+
+    @volatility_alerts.error
+    async def volatility_alerts_error(self, error):
+        """Safety net: if the loop ever dies, log it and restart it so
+        alerts don't stay silently dead (as happened on a Discord 503)."""
+        logger.error(f"volatility_alerts loop crashed: {error!r} — restarting")
+        try:
+            self.volatility_alerts.restart()
+        except Exception as e:
+            logger.error(f"Failed to restart volatility_alerts loop: {e!r}")
 
 def setup(bot, config):
     bot.add_cog(VolatilityCog(bot, config))
