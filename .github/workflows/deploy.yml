@@ -1,0 +1,67 @@
+name: Deploy Discord Bot
+
+# Deploys the Discord bot to the AWS Lightsail box (Singapore) on push to main.
+# Mirrors the app's deploy.yml: the runner rsyncs the source to the box, then
+# restarts the systemd service. The box's own config.production.json (bot token)
+# and .env are gitignored and excluded from the sync, so they're preserved.
+#
+# Required secret:
+#   LIGHTSAIL_SSH_KEY — contents of ~/Documents/novadiem/keys/ssh/novadiem-lightsail.pem
+# Host/user/service are not secret (they already live in the app's deploy config).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-discord-bot
+  cancel-in-progress: false
+
+env:
+  BOX_HOST: 52.76.172.45
+  BOX_USER: ubuntu
+  SERVICE: cryptowatch-discord-bot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$BOX_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Locate the bot directory on the box
+        id: dir
+        run: |
+          KEY="$HOME/.ssh/deploy_key"
+          TGT="$BOX_USER@$BOX_HOST"
+          DIR=$(ssh -i "$KEY" -o ConnectTimeout=15 "$TGT" "systemctl show $SERVICE -p WorkingDirectory --value" 2>/dev/null)
+          if ! ssh -i "$KEY" -o ConnectTimeout=15 "$TGT" "test -f '$DIR/main.py'" 2>/dev/null; then
+            DIR="/home/$BOX_USER/cryptowatch-discord-bot"
+          fi
+          if ! ssh -i "$KEY" -o ConnectTimeout=15 "$TGT" "test -f '$DIR/main.py'" 2>/dev/null; then
+            echo "::error::bot main.py not found on box (checked systemd WorkingDirectory and $DIR)"
+            exit 1
+          fi
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Deploying to: $DIR"
+
+      - name: Sync source + restart service
+        run: |
+          KEY="$HOME/.ssh/deploy_key"
+          DIR="${{ steps.dir.outputs.dir }}"
+          rsync -az --delete \
+            -e "ssh -i $KEY -o ConnectTimeout=15" \
+            --exclude .git --exclude .github --exclude __pycache__ --exclude '*.pyc' \
+            --exclude .env --exclude .env.production \
+            --exclude config.development.json --exclude config.production.json \
+            --exclude venv --exclude .venv --exclude logs --exclude .DS_Store \
+            ./ "$BOX_USER@$BOX_HOST:$DIR/"
+          ssh -i "$KEY" -o ConnectTimeout=15 "$BOX_USER@$BOX_HOST" \
+            "sudo systemctl restart $SERVICE && sleep 3 && systemctl is-active $SERVICE"

@@ -13,6 +13,44 @@ from utils.moderation import purge_messages, send_temporary_message
 
 logger = logging.getLogger('discord-bot.admin_commands')
 
+# Purges larger than this require an explicit Delete/Cancel confirmation.
+PURGE_CONFIRM_THRESHOLD = 10
+
+
+class ConfirmPurgeView(discord.ui.View):
+    """Delete/Cancel confirmation for a large purge. Only the person who ran the
+    command can act on it, and it times out doing nothing after 30s."""
+
+    def __init__(self, invoker_id: int, on_confirm):
+        super().__init__(timeout=30)
+        self.invoker_id = invoker_id
+        self._on_confirm = on_confirm
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.invoker_id:
+            await interaction.response.send_message(
+                "This confirmation isn't yours.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(content="🧹 Deleting…", view=self)
+        await self._on_confirm(interaction)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(
+            content="Cancelled — nothing was deleted.", view=self
+        )
+        self.stop()
+
 
 class AdminCommands(SlashCommandBase):
     """Admin commands for server and member management - thin interface"""
@@ -226,58 +264,72 @@ class AdminCommands(SlashCommandBase):
             logger.error(f"Error setting channel: {e}")
             await interaction.followup.send(f"❌ Error: {str(e)}")
     
-    @app_commands.command(name="purge", description="Delete multiple messages from the current channel")
+    @app_commands.command(name="purge", description="Delete recent messages from the current channel")
     @app_commands.describe(
-        amount="Number of messages to delete (1-100, default: 100)",
+        amount="How many messages to delete (1-100). Required — there is no default.",
         reason="Reason for purging messages"
     )
     @app_commands.default_permissions(manage_messages=True)
     async def purge_command(
-        self, 
-        interaction: discord.Interaction, 
-        amount: Optional[int] = 100,
+        self,
+        interaction: discord.Interaction,
+        amount: app_commands.Range[int, 1, 100],
         reason: Optional[str] = None
     ):
-        """Purge messages from the current channel"""
-        # Validate amount
-        if amount < 1 or amount > 100:
+        """Purge messages from the current channel.
+
+        `amount` is REQUIRED and range-checked by Discord (1-100), so an empty or
+        hasty submit can no longer silently default to 100 and wipe the channel.
+        Anything above PURGE_CONFIRM_THRESHOLD asks for an explicit Delete/Cancel
+        confirmation first — the brake that was missing.
+        """
+        if amount > PURGE_CONFIRM_THRESHOLD:
+            view = ConfirmPurgeView(
+                invoker_id=interaction.user.id,
+                on_confirm=lambda i: self._do_purge(i, amount, reason),
+            )
             await interaction.response.send_message(
-                "❌ Amount must be between 1 and 100 messages",
-                ephemeral=True
+                f"⚠️ Delete the last **{amount}** messages in this channel? "
+                f"This cannot be undone.",
+                view=view,
+                ephemeral=True,
             )
             return
-        
-        # Defer the response since purging might take a moment
+
+        # Small purge: no confirmation needed.
         await interaction.response.defer(ephemeral=True)
-        
-        # Perform the purge (using existing moderation utility)
+        await self._do_purge(interaction, amount, reason)
+
+    async def _do_purge(self, interaction: discord.Interaction, amount: int, reason: Optional[str]):
+        """Run the actual purge. The interaction must already be deferred (small
+        path) or have had its message edited (confirm path), so results are sent
+        via followup."""
         deleted_count, error = await purge_messages(
             channel=interaction.channel,
-            limit=amount
+            limit=amount,
         )
-        
+
         if error:
             await interaction.followup.send(f"❌ {error}", ephemeral=True)
-        else:
-            await interaction.followup.send(
-                f"✅ Successfully deleted {deleted_count} messages",
-                ephemeral=True
-            )
-            
-            # Also send a temporary public notification
-            reason_text = f"\nReason: {reason}" if reason else ""
-            await send_temporary_message(
-                channel=interaction.channel,
-                content=f"🧹 Purged {deleted_count} messages{reason_text}",
-                delete_after=3.0
-            )
-            
-            # Log the action
-            logger.info(
-                f"{interaction.user} purged {deleted_count} messages in "
-                f"#{interaction.channel.name} ({interaction.guild.name})"
-                f"{f' - Reason: {reason}' if reason else ''}"
-            )
+            return
+
+        await interaction.followup.send(
+            f"✅ Deleted {deleted_count} message(s)", ephemeral=True
+        )
+
+        # Temporary public notification (self-deletes).
+        reason_text = f"\nReason: {reason}" if reason else ""
+        await send_temporary_message(
+            channel=interaction.channel,
+            content=f"🧹 Purged {deleted_count} messages{reason_text}",
+            delete_after=3.0,
+        )
+
+        logger.info(
+            f"{interaction.user} purged {deleted_count} messages in "
+            f"#{interaction.channel.name} ({interaction.guild.name})"
+            f"{f' - Reason: {reason}' if reason else ''}"
+        )
 
 
 async def setup(bot):
