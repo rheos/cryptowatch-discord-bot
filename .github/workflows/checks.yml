@@ -1,0 +1,39 @@
+# There is no test suite here, so a Dependabot bump would otherwise merge on
+# no evidence. These two steps cover the two ways a bump can break this repo:
+#
+#   compileall  — every .py still parses (the image build never imports the
+#                 bot code, so a syntax error would not surface there)
+#   docker build — the base image is usable and every pin in requirements.txt
+#                 still resolves and installs against it
+#
+# Between them they exercise the pip, docker and github-actions ecosystems
+# that Dependabot watches on this repo.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Syntax check every module
+        run: python -m compileall -q .
+
+      - name: Build the image
+        run: docker build -t cryptowatch-discord-bot:ci .
