@@ -1,5 +1,5 @@
 discord.py>=2.3.0
-pytz>=2023.3
+pytz>=2026.3.post1
 aiohttp>=3.8.0
 python-dotenv>=1.0.0
 aiomysql>=0.2.0
