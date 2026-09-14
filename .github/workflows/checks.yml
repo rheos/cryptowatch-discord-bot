@@ -37,3 +37,6 @@ jobs:
 
       - name: Build the image
         run: docker build -t cryptowatch-discord-bot:ci .
+
+      - name: Import every module against the installed dependencies
+        run: docker run --rm cryptowatch-discord-bot:ci python scripts/import_check.py
